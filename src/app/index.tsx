@@ -1,7 +1,10 @@
 import { ThemedView } from "@/components/themed-view";
 import Task from "@/components/todoButtons";
-import { useState } from "react";
+import { addTodo, deleteTodo, getTodos, initDatabase } from "@/db/database";
+import type { Todo } from "@/db/todo";
+import { useEffect, useState } from "react";
 import {
+  Alert,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -14,18 +17,66 @@ import {
 
 export default function HomeScreen() {
   const [task, setTask] = useState("");
-  const [taskItems, setTaskItems] = useState<string[]>([]); // always infer that this is string else error
-  const [checked, setChecked] = useState(false);
+  const [taskItems, setTaskItems] = useState<Todo[]>([]); // always infer that this is string else error
 
-  const handleAddTask = () => {
-    Keyboard.dismiss();
-    setTaskItems([...taskItems, task]);
+  useEffect(() => {
+    async function loadTodos() {
+      try {
+        await initDatabase(); // init
+
+        const savedTodos = await getTodos();
+        setTaskItems(savedTodos);
+      } catch (e) {
+        console.error("failed to load todos", e);
+      }
+
+      loadTodos();
+    }
+  }, []);
+
+  const handleAddTask = async () => {
+    const trimmedTask = task.trim(); //trim for white spaces and nl
+
+    if (trimmedTask.length === 0) {
+      return;
+    }
+
+    try {
+      Keyboard.dismiss();
+
+      await addTodo(trimmedTask);
+
+      const updatedTodos = await getTodos();
+      setTaskItems(updatedTodos);
+
+      setTask("");
+    } catch (e) {
+      console.error("Failed to add todo:", e);
+    }
   };
+
   // ignore warning
-  const completeTask = (index) => {
-    let itemsCopy = [...taskItems];
-    itemsCopy.splice(index, 1);
-    setTaskItems(itemsCopy);
+  const confirmDeleteTask = (id: number) => {
+    Alert.alert("Delete task", "Are you sure you want to delete this task?", [
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteTodo(id);
+
+            const updatedTodos = await getTodos();
+            setTaskItems(updatedTodos);
+          } catch (e) {
+            console.error("Failed to delete todo:", e);
+          }
+        },
+      },
+    ]);
   };
 
   return (
@@ -38,8 +89,11 @@ export default function HomeScreen() {
           {/* Todo list here */}
           {taskItems.map((item, index) => {
             return (
-              <TouchableOpacity key={index} onPress={() => completeTask(index)}>
-                <Task text={item} />
+              <TouchableOpacity
+                key={item.id}
+                onPress={() => confirmDeleteTask(item.id)}
+              >
+                <Task text={item.title} />
               </TouchableOpacity>
             );
             // get index for item key

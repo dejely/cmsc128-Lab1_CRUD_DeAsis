@@ -1,11 +1,14 @@
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
-const Task = (props) => {
+type TaskProps = {
+  text: string;
+};
+const Task = ({ text }: TaskProps) => {
   return (
     <View style={styles.todo}>
       <View style={styles.todoLeft}>
         <TouchableOpacity style={styles.bullet}></TouchableOpacity>
-        <Text style={styles.todoText}>{props.text}</Text>
+        <Text style={styles.todoText}>{text}</Text>
       </View>
       <View style={styles.checkbox}></View>
     </View>
