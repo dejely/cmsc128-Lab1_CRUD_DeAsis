@@ -9,17 +9,19 @@ import {
 } from "@/db/database";
 import type { Todo } from "@/db/todo";
 import { styles } from "@/styles/home.styles";
+import DateTimePicker from "@expo/ui/community/datetime-picker";
 import Feather from "@expo/vector-icons/Feather";
 import { useEffect, useRef, useState } from "react";
 import {
   Alert,
   Keyboard,
   KeyboardAvoidingView,
+  Platform,
   ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 
 export default function HomeScreen() {
@@ -32,6 +34,7 @@ export default function HomeScreen() {
   const [deletedTask, setDeletedTask] = useState<Todo | null>(null); // our undo option can be null
   const deleteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false); // for the calendar ltr
 
   useEffect(() => {
     async function loadTodos() {
@@ -56,17 +59,15 @@ export default function HomeScreen() {
     }
 
     const due = dueDate.trim();
-    const date = new Date(due.replace(" ", "T") + ":00");
-    const parts = due.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/);
+    const date = new Date(`${due}T00:00:00`);
+    const parts = due.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if (
       !parts ||
       date.getFullYear() !== Number(parts[1]) ||
       date.getMonth() + 1 !== Number(parts[2]) ||
-      date.getDate() !== Number(parts[3]) ||
-      date.getHours() !== Number(parts[4]) ||
-      date.getMinutes() !== Number(parts[5])
+      date.getDate() !== Number(parts[3])
     ) {
-      setFormError("Enter a valid due date and time: YYYY-MM-DD HH:mm (24-hour).");
+      setFormError("Enter a valid due date and time: YYYY-MM-DD.");
       return;
     }
 
@@ -176,7 +177,9 @@ export default function HomeScreen() {
                 disabled={editingId !== null} // not must not be changed to null
                 onPress={() => confirmDeleteTask(item.id)}
               >
-                <Task text={`${item.title}\n${item.dueDate ? new Date(item.dueDate).toLocaleString() : "No due date"}\n${item.priority} · ${item.category}`} />
+                <Task
+                  text={`${item.title}\n${item.dueDate ? new Date(item.dueDate).toLocaleDateString() : "No due date"}\n${item.priority} · ${item.category}`}
+                />
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -215,21 +218,9 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
       )}
-      <KeyboardAvoidingView
-        behavior="position"
-        style={styles.keyboardWrapper}
-      >
+      <KeyboardAvoidingView behavior="position" style={styles.keyboardWrapper}>
         {editingId === null && (
           <View style={styles.taskFields}>
-            <Text>Due date and time (24-hour)</Text>
-            <TextInput
-              style={styles.fieldInput}
-              accessibilityLabel="Due date and time"
-              placeholder="YYYY-MM-DD HH:mm"
-              value={dueDate}
-              onChangeText={setDueDate}
-              autoCorrect={false}
-            />
             <Text>Priority</Text>
             <View style={styles.writeTaskWrapper}>
               {(["Low", "Med", "High"] as const).map((value) => (
@@ -238,7 +229,10 @@ export default function HomeScreen() {
                   accessibilityRole="button"
                   accessibilityState={{ selected: priority === value }}
                   onPress={() => setPriority(value)}
-                  style={[styles.option, priority === value && styles.selectedOption]}
+                  style={[
+                    styles.option,
+                    priority === value && styles.selectedOption,
+                  ]}
                 >
                   <Text>{value}</Text>
                 </TouchableOpacity>
@@ -252,7 +246,10 @@ export default function HomeScreen() {
                   accessibilityRole="button"
                   accessibilityState={{ selected: category === value }}
                   onPress={() => setCategory(value)}
-                  style={[styles.option, category === value && styles.selectedOption]}
+                  style={[
+                    styles.option,
+                    category === value && styles.selectedOption,
+                  ]}
                 >
                   <Text>{value}</Text>
                 </TouchableOpacity>
@@ -261,7 +258,9 @@ export default function HomeScreen() {
           </View>
         )}
         {formError ? (
-          <Text accessibilityRole="alert" style={{ color: "#B91C1C" }}>{formError}</Text>
+          <Text accessibilityRole="alert" style={{ color: "#B91C1C" }}>
+            {formError}
+          </Text>
         ) : null}
         <View style={styles.writeTaskWrapper}>
           <TextInput
@@ -271,22 +270,64 @@ export default function HomeScreen() {
             value={task}
             onChangeText={(text) => setTask(text)}
           />
+
+          {editingId === null && (
+            <TouchableOpacity
+              style={[styles.fieldInput, { width: 125 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Select due date"
+              onPress={() => {
+                Keyboard.dismiss();
+                setShowDatePicker(true);
+              }}
+            >
+              <Text>{dueDate || "📅 Due date"}</Text>
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity
             accessibilityRole="button"
-            accessibilityLabel={editingId !== null ? "Save changes" : "Add task"}
-            onPress={editingId !== null ? handleUpdateTask : handleAddTask} // so it could be dynamic
+            accessibilityLabel={
+              editingId !== null ? "Save changes" : "Add task"
+            }
+            onPress={editingId !== null ? handleUpdateTask : handleAddTask}
           >
             <View style={styles.addWrapper}>
-              <Text style={styles.addText}>{editingId !== null ? "✓" : "+"}</Text>
+              <Text style={styles.addText}>
+                {" "}
+                {editingId !== null ? "✓" : "+"}
+              </Text>
             </View>
           </TouchableOpacity>
 
           {editingId !== null && (
             <TouchableOpacity onPress={handleCancelEdit}>
-              <Text>Cancel</Text>
+              <Text> Cancel </Text>
             </TouchableOpacity>
           )}
         </View>
+
+        {editingId === null && showDatePicker && (
+          <DateTimePicker
+            value={dueDate ? new Date(`${dueDate}T00:00:00`) : new Date()}
+            mode="date"
+            display={Platform.OS === "ios" ? "inline" : "default"}
+            presentation="dialog"
+            onDismiss={() => setShowDatePicker(false)}
+            onValueChange={(_, selectedDate) => {
+              const year = selectedDate.getFullYear();
+              const month = String(selectedDate.getMonth() + 1).padStart(
+                2,
+                "0",
+              );
+              const day = String(selectedDate.getDate()).padStart(2, "0");
+
+              setDueDate(`${year}-${month}-${day}`);
+              setFormError("");
+              setShowDatePicker(false);
+            }}
+          />
+        )}
       </KeyboardAvoidingView>
     </ThemedView>
   );
