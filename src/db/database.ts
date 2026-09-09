@@ -44,3 +44,9 @@ export async function deleteTodo(id: number) {
 
   await database.runAsync("DELETE FROM todos WHERE id = ?", id);
 }
+
+export async function updateTodo(id: number, title: string) {
+  const database = await databasePromise;
+
+  await database.runAsync("UPDATE todos SET title = ? WHERE id =?", title, id);
+}

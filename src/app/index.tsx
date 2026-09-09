@@ -1,13 +1,19 @@
 import { ThemedView } from "@/components/themed-view";
 import Task from "@/components/todoButtons";
-import { addTodo, deleteTodo, getTodos, initDatabase } from "@/db/database";
+import {
+  addTodo,
+  deleteTodo,
+  getTodos,
+  initDatabase,
+  updateTodo,
+} from "@/db/database";
 import type { Todo } from "@/db/todo";
+import Feather from "@expo/vector-icons/Feather";
 import { useEffect, useRef, useState } from "react";
 import {
   Alert,
   Keyboard,
   KeyboardAvoidingView,
-  Platform,
   StyleSheet,
   Text,
   TextInput,
@@ -20,6 +26,7 @@ export default function HomeScreen() {
   const [taskItems, setTaskItems] = useState<Todo[]>([]); // always infer that this is string else error
   const [deletedTask, setDeletedTask] = useState<Todo | null>(null); // our undo option can be null
   const deleteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   useEffect(() => {
     async function loadTodos() {
@@ -94,25 +101,68 @@ export default function HomeScreen() {
     }, 3000);
   };
 
+  const handleEditTask = (todo: Todo) => {
+    setEditingId(todo.id);
+    setTask(todo.title);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setTask("");
+  };
+
+  const handleUpdateTask = async () => {
+    const title = task.trim();
+    if (editingId === null || title.length === 0) return; // not allowed
+
+    try {
+      await updateTodo(editingId, title); // call fn from db
+
+      setTaskItems((items) =>
+        items.map(
+          (
+            item, //iterate
+          ) => (item.id === editingId ? { ...item, title } : item),
+        ),
+      );
+
+      setEditingId(null);
+      setTask("");
+      Keyboard.dismiss(); // take away android keyboard
+    } catch (e) {
+      console.error("Failed to upload todo:", e);
+      Alert.alert("Update failed", "Please try again.");
+    }
+  };
+
   return (
     <ThemedView style={styles.container}>
       {/* Title */}
       <View style={styles.taskWrapper}>
-        <Text style={styles.title}>Today's Task</Text>
+        <Text style={styles.title}>Todo List</Text>
 
         <View>
           {/* Todo list here */}
-          {taskItems.map((item, index) => {
-            return (
+          {taskItems.map((item) => (
+            <View key={item.id} style={styles.taskRow}>
               <TouchableOpacity
-                key={item.id}
+                style={{ flex: 1 }}
+                disabled={editingId !== null} // not must not be changed to null
                 onPress={() => confirmDeleteTask(item.id)}
               >
                 <Task text={item.title} />
               </TouchableOpacity>
-            );
-            // get index for item key
-          })}
+
+              <TouchableOpacity
+                style={styles.editButton}
+                accessibilityRole="button"
+                accessibilityLabel={`Edit ${item.title}`}
+                onPress={() => handleEditTask(item)}
+              >
+                <Feather name="edit-2" size={22} color="#2563EB" />
+              </TouchableOpacity>
+            </View>
+          ))}
         </View>
       </View>
       {/* Writing the user's task */}
@@ -140,20 +190,31 @@ export default function HomeScreen() {
         </View>
       )}
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.writeTaskWrapper}
+        behavior="position"
+        style={styles.keyboardWrapper}
+        contentContainerStyle={styles.writeTaskWrapper}
       >
         <TextInput
           style={styles.input}
-          placeholder={"Write a task"}
+          placeholder={editingId !== null ? "Edit your task" : "Write a task"} // switch the labels if
           value={task}
           onChangeText={(text) => setTask(text)}
         />
-        <TouchableOpacity onPress={() => handleAddTask()}>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel={editingId !== null ? "Save changes" : "Add task"}
+          onPress={editingId !== null ? handleUpdateTask : handleAddTask} // so it could be dynamic
+        >
           <View style={styles.addWrapper}>
-            <Text style={styles.addText}>+</Text>
+            <Text style={styles.addText}>{editingId !== null ? "✓" : "+"}</Text>
           </View>
         </TouchableOpacity>
+
+        {editingId !== null && (
+          <TouchableOpacity onPress={handleCancelEdit}>
+            <Text>Cancel</Text>
+          </TouchableOpacity>
+        )}
       </KeyboardAvoidingView>
     </ThemedView>
   );
@@ -171,10 +232,6 @@ const styles = StyleSheet.create({
   },
   code: { textTransform: "uppercase" },
   writeTaskWrapper: {
-    position: "absolute",
-    bottom: 60,
-    left: 20,
-    right: 20,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
@@ -220,5 +277,22 @@ const styles = StyleSheet.create({
   undoText: {
     color: "#fff",
     fontWeight: "bold",
+  },
+  taskRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  editButton: {
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  keyboardWrapper: {
+    position: "absolute",
+    bottom: 60,
+    left: 20,
+    right: 20,
   },
 });
