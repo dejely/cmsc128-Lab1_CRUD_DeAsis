@@ -2,7 +2,7 @@ import { ThemedView } from "@/components/themed-view";
 import Task from "@/components/todoButtons";
 import { addTodo, deleteTodo, getTodos, initDatabase } from "@/db/database";
 import type { Todo } from "@/db/todo";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Alert,
   Keyboard,
@@ -18,6 +18,8 @@ import {
 export default function HomeScreen() {
   const [task, setTask] = useState("");
   const [taskItems, setTaskItems] = useState<Todo[]>([]); // always infer that this is string else error
+  const [deletedTask, setDeletedTask] = useState<Todo | null>(null); // our undo option can be null
+  const deleteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     async function loadTodos() {
@@ -29,9 +31,8 @@ export default function HomeScreen() {
       } catch (e) {
         console.error("failed to load todos", e);
       }
-
-      loadTodos();
     }
+    loadTodos();
   }, []);
 
   const handleAddTask = async () => {
@@ -55,28 +56,42 @@ export default function HomeScreen() {
     }
   };
 
-  // ignore warning
   const confirmDeleteTask = (id: number) => {
     Alert.alert("Delete task", "Are you sure you want to delete this task?", [
-      {
-        text: "Cancel",
-        style: "cancel",
-      },
+      { text: "Cancel", style: "cancel" },
       {
         text: "Delete",
         style: "destructive",
-        onPress: async () => {
-          try {
-            await deleteTodo(id);
-
-            const updatedTodos = await getTodos();
-            setTaskItems(updatedTodos);
-          } catch (e) {
-            console.error("Failed to delete todo:", e);
-          }
-        },
+        onPress: () => handleDeleteTask(id),
       },
     ]);
+  };
+
+  // ignore warning
+  const handleDeleteTask = (id: number) => {
+    const todo = taskItems.find((item) => item.id === id); //find tasks whos id matches it
+
+    // if no task was found, stop.
+    if (!todo) return;
+
+    // remove it visually
+    setTaskItems((items) => items.filter((item) => item.id !== id));
+    setDeletedTask(todo);
+
+    // reset an existing undo timer
+    if (deleteTimer.current) {
+      clearTimeout(deleteTimer.current);
+    }
+
+    // Permanently delete after 3 seconds
+    deleteTimer.current = setTimeout(async () => {
+      try {
+        await deleteTodo(todo.id);
+        setDeletedTask(null);
+      } catch (e) {
+        console.error("Failed to delete todo:", e);
+      }
+    }, 3000);
   };
 
   return (
@@ -101,6 +116,29 @@ export default function HomeScreen() {
         </View>
       </View>
       {/* Writing the user's task */}
+      {deletedTask && (
+        <View style={styles.undoBanner}>
+          <Text style={{ color: "#fff" }}> Task Deleted</Text>
+
+          <TouchableOpacity
+            onPress={() => {
+              const todo = deletedTask;
+              if (!todo) return;
+
+              // set it back
+              if (deleteTimer.current !== null) {
+                clearTimeout(deleteTimer.current);
+                deleteTimer.current = null;
+              }
+
+              setTaskItems((items) => [...items, todo]); // Restore the deleted task
+              setDeletedTask(null); // hide the banner after clicking
+            }}
+          >
+            <Text style={styles.undoText}>UNDO</Text>
+          </TouchableOpacity>
+        </View>
+      )}
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.writeTaskWrapper}
@@ -164,6 +202,23 @@ const styles = StyleSheet.create({
   addText: {},
   title: {
     fontSize: 24,
+    fontWeight: "bold",
+  },
+  undoBanner: {
+    position: "absolute",
+    bottom: 125,
+    left: 20,
+    right: 20,
+    padding: 15,
+    backgroundColor: "#333",
+    borderRadius: 8,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+
+  undoText: {
+    color: "#fff",
     fontWeight: "bold",
   },
 });
