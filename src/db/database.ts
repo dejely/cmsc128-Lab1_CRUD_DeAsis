@@ -13,6 +13,19 @@ const databasePromise = SQLite.openDatabaseAsync("tasks.db").then(
             );
             `);
 
+    const columns = await database.getAllAsync<{ name: string }>(
+      "PRAGMA table_info(todos)",
+    );
+    for (const [name, definition] of Object.entries({
+      dueDate: "TEXT",
+      priority: "TEXT NOT NULL DEFAULT 'Med'",
+      category: "TEXT NOT NULL DEFAULT 'Others'",
+    })) {
+      if (!columns.some((column) => column.name === name)) {
+        await database.execAsync(`ALTER TABLE todos ADD COLUMN ${name} ${definition}`);
+      }
+    }
+
     return database;
   },
 );
@@ -25,17 +38,24 @@ export async function getTodos(): Promise<Todo[]> {
   const database = await databasePromise;
 
   return database.getAllAsync<Todo>(
-    "SELECT id, title, completed FROM todos ORDER BY id DESC",
+    "SELECT id, title, completed, dueDate, priority, category FROM todos ORDER BY id DESC",
   );
 }
 
-export async function addTodo(title: string) {
+export async function addTodo(
+  title: string,
+  dueDate: string,
+  priority: Todo["priority"],
+  category: Todo["category"],
+) {
   const database = await databasePromise;
 
   await database.runAsync(
-    "INSERT INTO todos (title, completed) VALUES (?,?)",
+    "INSERT INTO todos (title, dueDate, priority, category) VALUES (?,?,?,?)",
     title,
-    0,
+    dueDate,
+    priority,
+    category,
   );
 }
 

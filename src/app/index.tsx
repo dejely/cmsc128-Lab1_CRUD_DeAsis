@@ -15,6 +15,7 @@ import {
   Alert,
   Keyboard,
   KeyboardAvoidingView,
+  ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
@@ -23,6 +24,10 @@ import {
 
 export default function HomeScreen() {
   const [task, setTask] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [priority, setPriority] = useState<Todo["priority"]>("Med");
+  const [category, setCategory] = useState<Todo["category"]>("Others");
+  const [formError, setFormError] = useState("");
   const [taskItems, setTaskItems] = useState<Todo[]>([]); // always infer that this is string else error
   const [deletedTask, setDeletedTask] = useState<Todo | null>(null); // our undo option can be null
   const deleteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -46,20 +51,41 @@ export default function HomeScreen() {
     const trimmedTask = task.trim(); //trim for white spaces and nl
 
     if (trimmedTask.length === 0) {
+      setFormError("Enter a title.");
+      return;
+    }
+
+    const due = dueDate.trim();
+    const date = new Date(due.replace(" ", "T") + ":00");
+    const parts = due.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/);
+    if (
+      !parts ||
+      date.getFullYear() !== Number(parts[1]) ||
+      date.getMonth() + 1 !== Number(parts[2]) ||
+      date.getDate() !== Number(parts[3]) ||
+      date.getHours() !== Number(parts[4]) ||
+      date.getMinutes() !== Number(parts[5])
+    ) {
+      setFormError("Enter a valid due date and time: YYYY-MM-DD HH:mm (24-hour).");
       return;
     }
 
     try {
+      setFormError("");
       Keyboard.dismiss();
 
-      await addTodo(trimmedTask);
+      await addTodo(trimmedTask, date.toISOString(), priority, category);
 
       const updatedTodos = await getTodos();
       setTaskItems(updatedTodos);
 
       setTask("");
+      setDueDate("");
+      setPriority("Med");
+      setCategory("Others");
     } catch (e) {
       console.error("Failed to add todo:", e);
+      setFormError("Failed to add task. Please try again.");
     }
   };
 
@@ -102,6 +128,7 @@ export default function HomeScreen() {
   };
 
   const handleEditTask = (todo: Todo) => {
+    setFormError("");
     setEditingId(todo.id);
     setTask(todo.title);
   };
@@ -140,7 +167,7 @@ export default function HomeScreen() {
       {/* Title */}
       <View style={styles.taskWrapper}>
         <Text style={styles.title}>Todo List</Text>
-        <View>
+        <ScrollView>
           {/* Todo list here */}
           {taskItems.map((item) => (
             <View key={item.id} style={styles.taskRow}>
@@ -149,7 +176,7 @@ export default function HomeScreen() {
                 disabled={editingId !== null} // not must not be changed to null
                 onPress={() => confirmDeleteTask(item.id)}
               >
-                <Task text={item.title} />
+                <Task text={`${item.title}\n${item.dueDate ? new Date(item.dueDate).toLocaleString() : "No due date"}\n${item.priority} · ${item.category}`} />
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -162,7 +189,7 @@ export default function HomeScreen() {
               </TouchableOpacity>
             </View>
           ))}
-        </View>
+        </ScrollView>
       </View>
       {/* Writing the user's task */}
       {deletedTask && (
@@ -191,7 +218,6 @@ export default function HomeScreen() {
       <KeyboardAvoidingView
         behavior="position"
         style={styles.keyboardWrapper}
-        contentContainerStyle={styles.writeTaskWrapper}
       >
         <TextInput
           style={styles.input}
@@ -207,12 +233,6 @@ export default function HomeScreen() {
           <View style={styles.addWrapper}>
             <Text style={styles.addText}>{editingId !== null ? "✓" : "+"}</Text>
           </View>
-        </TouchableOpacity>
-
-        {editingId !== null && (
-          <TouchableOpacity onPress={handleCancelEdit}>
-            <Text>Cancel</Text>
-          </TouchableOpacity>
         )}
       </KeyboardAvoidingView>
     </ThemedView>

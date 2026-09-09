@@ -6,11 +6,33 @@ export const styles = StyleSheet.create({
     backgroundColor: "#E8EAED",
   },
   taskWrapper: {
+    flex: 1,
     paddingTop: 80,
     paddingHorizontal: 20,
     backgroundColor: "#E8EAED",
   },
   code: { textTransform: "uppercase" },
+  taskFields: {
+    gap: 6,
+    marginBottom: 10,
+  },
+  fieldInput: {
+    padding: 12,
+    backgroundColor: "#fff",
+    borderRadius: 15,
+    borderColor: "#C0C0C0",
+    borderWidth: 1,
+  },
+  option: {
+    flex: 1,
+    padding: 10,
+    alignItems: "center",
+    borderRadius: 10,
+    backgroundColor: "#fff",
+  },
+  selectedOption: {
+    backgroundColor: "#93C5FD",
+  },
   writeTaskWrapper: {
     flexDirection: "row",
     alignItems: "center",
@@ -42,10 +64,8 @@ export const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   undoBanner: {
-    position: "absolute",
-    bottom: 125,
-    left: 20,
-    right: 20,
+    marginHorizontal: 20,
+    marginBottom: 10,
     padding: 15,
     backgroundColor: "#333",
     borderRadius: 8,
@@ -70,9 +90,7 @@ export const styles = StyleSheet.create({
     justifyContent: "center",
   },
   keyboardWrapper: {
-    position: "absolute",
-    bottom: 60,
-    left: 20,
-    right: 20,
+    paddingBottom: 60,
+    paddingHorizontal: 20,
   },
 });
