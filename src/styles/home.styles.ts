@@ -32,7 +32,6 @@ export const styles = StyleSheet.create({
   },
   selectedOption: {
     backgroundColor: "#93C5FD",
-    color: "#ef0606",
   },
   writeTaskWrapper: {
     flexDirection: "row",
@@ -40,6 +39,7 @@ export const styles = StyleSheet.create({
     gap: 10,
   },
   input: {
+    color: "#000000"
     paddingVertical: 15,
     flex: 1,
     minWidth: 0,
