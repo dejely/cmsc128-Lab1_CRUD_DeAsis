@@ -8,7 +8,8 @@
     "scheme": "cmsc128lab1cruddeasis",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.dejel.cmsc128Lab1-CRUD-DeAsis"
     },
     "android": {
       "adaptiveIcon": {
@@ -17,7 +18,8 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.dejel.cmsc128Lab1_CRUD_DeAsis"
     },
     "web": {
       "output": "static",
