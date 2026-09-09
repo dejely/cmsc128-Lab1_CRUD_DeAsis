@@ -219,21 +219,74 @@ export default function HomeScreen() {
         behavior="position"
         style={styles.keyboardWrapper}
       >
-        <TextInput
-          style={styles.input}
-          placeholder={editingId !== null ? "Edit your task" : "Write a task"} // switch the labels if
-          value={task}
-          onChangeText={(text) => setTask(text)}
-        />
-        <TouchableOpacity
-          accessibilityRole="button"
-          accessibilityLabel={editingId !== null ? "Save changes" : "Add task"}
-          onPress={editingId !== null ? handleUpdateTask : handleAddTask} // so it could be dynamic
-        >
-          <View style={styles.addWrapper}>
-            <Text style={styles.addText}>{editingId !== null ? "✓" : "+"}</Text>
+        {editingId === null && (
+          <View style={styles.taskFields}>
+            <Text>Due date and time (24-hour)</Text>
+            <TextInput
+              style={styles.fieldInput}
+              accessibilityLabel="Due date and time"
+              placeholder="YYYY-MM-DD HH:mm"
+              value={dueDate}
+              onChangeText={setDueDate}
+              autoCorrect={false}
+            />
+            <Text>Priority</Text>
+            <View style={styles.writeTaskWrapper}>
+              {(["Low", "Med", "High"] as const).map((value) => (
+                <TouchableOpacity
+                  key={value}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: priority === value }}
+                  onPress={() => setPriority(value)}
+                  style={[styles.option, priority === value && styles.selectedOption]}
+                >
+                  <Text>{value}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text>Tag/category</Text>
+            <View style={styles.writeTaskWrapper}>
+              {(["School", "Personal", "Others"] as const).map((value) => (
+                <TouchableOpacity
+                  key={value}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: category === value }}
+                  onPress={() => setCategory(value)}
+                  style={[styles.option, category === value && styles.selectedOption]}
+                >
+                  <Text>{value}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
         )}
+        {formError ? (
+          <Text accessibilityRole="alert" style={{ color: "#B91C1C" }}>{formError}</Text>
+        ) : null}
+        <View style={styles.writeTaskWrapper}>
+          <TextInput
+            style={styles.input}
+            accessibilityLabel="Title"
+            placeholder={editingId !== null ? "Edit your task" : "Title"} // switch the labels if
+            value={task}
+            onChangeText={(text) => setTask(text)}
+          />
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel={editingId !== null ? "Save changes" : "Add task"}
+            onPress={editingId !== null ? handleUpdateTask : handleAddTask} // so it could be dynamic
+          >
+            <View style={styles.addWrapper}>
+              <Text style={styles.addText}>{editingId !== null ? "✓" : "+"}</Text>
+            </View>
+          </TouchableOpacity>
+
+          {editingId !== null && (
+            <TouchableOpacity onPress={handleCancelEdit}>
+              <Text>Cancel</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </KeyboardAvoidingView>
     </ThemedView>
   );
