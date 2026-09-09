@@ -21,7 +21,7 @@ export default function HomeScreen() {
     Keyboard.dismiss();
     setTaskItems([...taskItems, task]);
   };
-
+  // ignore warning
   const completeTask = (index) => {
     let itemsCopy = [...taskItems];
     itemsCopy.splice(index, 1);
