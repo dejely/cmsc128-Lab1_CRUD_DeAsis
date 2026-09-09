@@ -27,7 +27,7 @@ import {
 export default function HomeScreen() {
   const [task, setTask] = useState("");
   const [dueDate, setDueDate] = useState("");
-  const [priority, setPriority] = useState<Todo["priority"]>("Med");
+  const [priority, setPriority] = useState<Todo["priority"]>("Medium");
   const [category, setCategory] = useState<Todo["category"]>("Others");
   const [formError, setFormError] = useState("");
   const [taskItems, setTaskItems] = useState<Todo[]>([]); // always infer that this is string else error
@@ -35,6 +35,14 @@ export default function HomeScreen() {
   const deleteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false); // for the calendar ltr
+  const [showTaskOptions, setShowTaskOptions] = useState(false);
+
+  const hideTaskOptions = () => {
+    setShowTaskOptions(false);
+    setShowDatePicker(false);
+    setFormError("");
+    Keyboard.dismiss();
+  };
 
   useEffect(() => {
     async function loadTodos() {
@@ -51,6 +59,7 @@ export default function HomeScreen() {
   }, []);
 
   const handleAddTask = async () => {
+    setShowTaskOptions(true);
     const trimmedTask = task.trim(); //trim for white spaces and nl
 
     if (trimmedTask.length === 0) {
@@ -82,8 +91,9 @@ export default function HomeScreen() {
 
       setTask("");
       setDueDate("");
-      setPriority("Med");
+      setPriority("Medium");
       setCategory("Others");
+      hideTaskOptions();
     } catch (e) {
       console.error("Failed to add todo:", e);
       setFormError("Failed to add task. Please try again.");
@@ -129,6 +139,8 @@ export default function HomeScreen() {
   };
 
   const handleEditTask = (todo: Todo) => {
+    // edits
+    hideTaskOptions();
     setFormError("");
     setEditingId(todo.id);
     setTask(todo.title);
@@ -174,13 +186,43 @@ export default function HomeScreen() {
             <View key={item.id} style={styles.taskRow}>
               <TouchableOpacity
                 style={{ flex: 1 }}
-                disabled={editingId !== null} // not must not be changed to null
+                disabled={editingId !== null}
                 onPress={() => confirmDeleteTask(item.id)}
               >
-                <Task
-                  text={`${item.title}\n${item.dueDate ? new Date(item.dueDate).toLocaleDateString() : "No due date"}\n${item.priority} · ${item.category}`}
-                />
+                <Task text={item.title} />
               </TouchableOpacity>
+
+              <View
+                style={{
+                  maxWidth: "45%",
+                  alignItems: "flex-end",
+                  gap: 0,
+                  backgroundColor: "#fff",
+                  paddingHorizontal: 12,
+                  paddingVertical: 10,
+                  borderRadius: 15,
+                  borderColor: "#C0C0C",
+                  alignContent: "center",
+                }}
+              >
+                <Text
+                  style={{ fontSize: 12, color: "#555", textAlign: "right" }}
+                >
+                  Due date:{" "}
+                  {item.dueDate
+                    ? new Date(item.dueDate).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "2-digit",
+                        year: "numeric",
+                      })
+                    : "Not set"}
+                </Text>
+                <Text
+                  style={{ fontSize: 12, color: "#555", textAlign: "right" }}
+                >
+                  {item.priority} · {item.category}
+                </Text>
+              </View>
 
               <TouchableOpacity
                 style={styles.editButton}
@@ -219,11 +261,19 @@ export default function HomeScreen() {
         </View>
       )}
       <KeyboardAvoidingView behavior="position" style={styles.keyboardWrapper}>
-        {editingId === null && (
+        {editingId === null && showTaskOptions && (
           <View style={styles.taskFields}>
+            {/*  collapses the buttons */}
+            <TouchableOpacity
+              accessibilityRole="button"
+              onPress={hideTaskOptions}
+              style={{ alignSelf: "flex-end", paddingVertical: 6 }}
+            >
+              <Text style={{ color: "#2563EB" }}>Hide options</Text>
+            </TouchableOpacity>
             <Text>Priority</Text>
             <View style={styles.writeTaskWrapper}>
-              {(["Low", "Med", "High"] as const).map((value) => (
+              {(["Low", "Medium", "High"] as const).map((value) => (
                 <TouchableOpacity
                   key={value}
                   accessibilityRole="button"
@@ -266,12 +316,17 @@ export default function HomeScreen() {
           <TextInput
             style={styles.input}
             accessibilityLabel="Title"
-            placeholder={editingId !== null ? "Edit your task" : "Title"} // switch the labels if
+            onFocus={() => {
+              if (editingId === null) setShowTaskOptions(true); // show the options
+            }}
+            placeholder={
+              editingId !== null ? "Edit your task" : "What needs to be done?"
+            } // switch the labels if
             value={task}
             onChangeText={(text) => setTask(text)}
           />
 
-          {editingId === null && (
+          {editingId === null && showTaskOptions && (
             <TouchableOpacity
               style={[styles.fieldInput, { width: 125 }]}
               accessibilityRole="button"
@@ -307,7 +362,7 @@ export default function HomeScreen() {
           )}
         </View>
 
-        {editingId === null && showDatePicker && (
+        {editingId === null && showTaskOptions && showDatePicker && (
           <DateTimePicker
             value={dueDate ? new Date(`${dueDate}T00:00:00`) : new Date()}
             mode="date"

@@ -32,6 +32,7 @@ export const styles = StyleSheet.create({
   },
   selectedOption: {
     backgroundColor: "#93C5FD",
+    color: "#ef0606",
   },
   writeTaskWrapper: {
     flexDirection: "row",
@@ -56,7 +57,7 @@ export const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#C0C0C0",
+    borderColor: "#c0c0c0",
   },
   addText: {},
   title: {

@@ -3,6 +3,6 @@ export type Todo = {
   title: string;
   completed: number;
   dueDate: string | null;
-  priority: "Low" | "Med" | "High";
+  priority: "Low" | "Medium" | "High";
   category: "School" | "Personal" | "Others";
 };
