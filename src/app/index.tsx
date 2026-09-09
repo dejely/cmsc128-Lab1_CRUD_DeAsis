@@ -1,7 +1,8 @@
 import { ThemedView } from "@/components/themed-view";
 import Task from "@/components/todoButtons";
-import * as React from "react";
+import { useState } from "react";
 import {
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -12,8 +13,20 @@ import {
 } from "react-native";
 
 export default function HomeScreen() {
-  const [input, setInput] = React.useState("");
-  const [checked, setChecked] = React.useState(false);
+  const [task, setTask] = useState("");
+  const [taskItems, setTaskItems] = useState<string[]>([]); // always infer that this is string else error
+  const [checked, setChecked] = useState(false);
+
+  const handleAddTask = () => {
+    Keyboard.dismiss();
+    setTaskItems([...taskItems, task]);
+  };
+
+  const completeTask = (index) => {
+    let itemsCopy = [...taskItems];
+    itemsCopy.splice(index, 1);
+    setTaskItems(itemsCopy);
+  };
 
   return (
     <ThemedView style={styles.container}>
@@ -23,8 +36,14 @@ export default function HomeScreen() {
 
         <View>
           {/* Todo list here */}
-          <Task text={"Task 1"} />
-          <Task text={"Task 2"} />
+          {taskItems.map((item, index) => {
+            return (
+              <TouchableOpacity key={index} onPress={() => completeTask(index)}>
+                <Task text={item} />
+              </TouchableOpacity>
+            );
+            // get index for item key
+          })}
         </View>
       </View>
       {/* Writing the user's task */}
@@ -32,8 +51,13 @@ export default function HomeScreen() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.writeTaskWrapper}
       >
-        <TextInput style={styles.input} placeholder={"Write a task"} />
-        <TouchableOpacity>
+        <TextInput
+          style={styles.input}
+          placeholder={"Write a task"}
+          value={task}
+          onChangeText={(text) => setTask(text)}
+        />
+        <TouchableOpacity onPress={() => handleAddTask()}>
           <View style={styles.addWrapper}>
             <Text style={styles.addText}>+</Text>
           </View>
