@@ -150,7 +150,7 @@ export default function HomeScreen() {
     setEditingId(null);
     setTask("");
   };
-
+  // edit fn
   const handleUpdateTask = async () => {
     const title = task.trim();
     if (editingId === null || title.length === 0) return; // not allowed
@@ -269,7 +269,7 @@ export default function HomeScreen() {
               onPress={hideTaskOptions}
               style={{ alignSelf: "flex-end", paddingVertical: 6 }}
             >
-              <Text style={{ color: "#2563EB" }}>Hide options</Text>
+              <Text style={{ color: "#2563EB" }}>v</Text>
             </TouchableOpacity>
             <Text>Priority</Text>
             <View style={styles.writeTaskWrapper}>

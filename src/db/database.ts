@@ -22,7 +22,9 @@ const databasePromise = SQLite.openDatabaseAsync("tasks.db").then(
       category: "TEXT NOT NULL DEFAULT 'Others'",
     })) {
       if (!columns.some((column) => column.name === name)) {
-        await database.execAsync(`ALTER TABLE todos ADD COLUMN ${name} ${definition}`);
+        await database.execAsync(
+          `ALTER TABLE todos ADD COLUMN ${name} ${definition}`,
+        );
       }
     }
 
