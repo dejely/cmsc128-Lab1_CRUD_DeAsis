@@ -39,7 +39,7 @@ export const styles = StyleSheet.create({
     gap: 10,
   },
   input: {
-    color: "#000000"
+    color: "#000000",
     paddingVertical: 15,
     flex: 1,
     minWidth: 0,

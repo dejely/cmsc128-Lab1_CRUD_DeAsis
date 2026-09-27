@@ -4,13 +4,13 @@ A mobile task manager for creating, viewing, editing, and deleting tasks. Each t
 
 ## Tech stack, backend, and database
 
-| Layer               | Choice                                                                           | Why I chose it                                                                                                                                     |
-| ------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Mobile app          | React Native 0.86.3 with Expo SDK 57 and React 19.2.3                            | React Native provides native UI components, while Expo simplifies running and building the app.                                                    |
-| Language            | TypeScript                                                                       | Typed task objects help keep the form, task list, and database functions consistent.                                                               |
-| Routing and UI      | Expo Router, React Native components, Expo UI date picker, and Expo vector icons | File-based routing provides the entry screen, and the calendar picker makes choosing a due date easier.                                            |
-| Backend/data access | Local asynchronous functions in `src/db/database.ts`                             | This single-user app can perform CRUD directly on the device without a server, authentication service, or hosted API.                              |
-| Database            | SQLite through `expo-sqlite`                                                     | SQLite provides persistent, structured storage and SQL queries without requiring a database account or an internet connection for data operations. |
+| Layer | Choice | Why I chose it |
+| --- | --- | --- |
+| Mobile app | React Native 0.86.3 with Expo SDK 57 and React 19.2.3 | React Native provides native UI components, while Expo simplifies running and building the app. |
+| Language | TypeScript | Typed task objects help keep the form, task list, and database functions consistent. |
+| Routing and UI | Expo Router, React Native components, Expo UI date picker, and Expo vector icons | File-based routing provides the entry screen, and the calendar picker makes choosing a due date easier. |
+| Backend/data access | Local asynchronous functions in `src/db/database.ts` | This single-user app can perform CRUD directly on the device without a server, authentication service, or hosted API. |
+| Database | SQLite through `expo-sqlite` | SQLite provides persistent, structured storage and SQL queries without requiring a database account or an internet connection for data operations. |
 
 The app opens a database named `tasks.db`, creates the `todos` table, and adds missing metadata columns automatically. Data belongs to the local app installation and is not synchronized between devices. No API keys, `.env` file, or separate database setup is required.
 
@@ -93,13 +93,13 @@ New tasks require a nonempty title and a valid due date. The app stores the sele
 
 This app exposes CRUD as TypeScript functions rather than HTTP endpoints. The implementation is in [`src/db/database.ts`](src/db/database.ts), and the task type is in [`src/db/todo.ts`](src/db/todo.ts).
 
-| Operation  | Function                                      | SQL used                                                                                  |
-| ---------- | --------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| Initialize | `initDatabase()`                              | Create the table if absent and add missing `dueDate`, `priority`, and `category` columns. |
-| Create     | `addTodo(title, dueDate, priority, category)` | `INSERT INTO todos (title, dueDate, priority, category) VALUES (?,?,?,?)`                 |
-| Read       | `getTodos()`                                  | `SELECT id, title, completed, dueDate, priority, category FROM todos ORDER BY id DESC`    |
-| Update     | `updateTodo(id, title)`                       | `UPDATE todos SET title = ? WHERE id = ?`                                                 |
-| Delete     | `deleteTodo(id)`                              | `DELETE FROM todos WHERE id = ?`                                                          |
+| Operation | Function | SQL used |
+| --- | --- | --- |
+| Initialize | `initDatabase()` | Create the table if absent and add missing `dueDate`, `priority`, and `category` columns. |
+| Create | `addTodo(title, dueDate, priority, category)` | `INSERT INTO todos (title, dueDate, priority, category) VALUES (?,?,?,?)` |
+| Read | `getTodos()` | `SELECT id, title, completed, dueDate, priority, category FROM todos ORDER BY id DESC` |
+| Update | `updateTodo(id, title)` | `UPDATE todos SET title = ? WHERE id = ?` |
+| Delete | `deleteTodo(id)` | `DELETE FROM todos WHERE id = ?` |
 
 Example calls **inside the running app** (these are not terminal commands):
 
@@ -143,8 +143,8 @@ The `todos` table stores an auto-incrementing integer `id`, required text `title
 
 Captured from the native Android app running on a connected HONOR tablet.
 
-| Saved task and creation options                                                                                                                                               | Editing a task title                                                                                                                          |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Saved task and creation options | Editing a task title |
+| --- | --- |
 | <img src="docs/screenshots/task-list.png" alt="Todo List showing a saved task with its due date and category, plus priority and category options for a new task" width="340"> | <img src="docs/screenshots/edit-task.png" alt="Todo List showing the task title in the edit field with Save and Cancel controls" width="340"> |
 
 Original images: [task list](docs/screenshots/task-list.png) · [edit form](docs/screenshots/edit-task.png).
