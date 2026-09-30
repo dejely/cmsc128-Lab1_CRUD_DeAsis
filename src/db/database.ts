@@ -9,7 +9,8 @@ const databasePromise = SQLite.openDatabaseAsync("tasks.db").then(
             CREATE TABLE IF NOT EXISTS todos (
             id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
             title TEXT NOT NULL,
-            completed INTEGER NOT NULL DEFAULT 0
+            completed INTEGER NOT NULL DEFAULT 0,
+            email TEXT NOT NULL CHECK (email = LOWER(email))
             );
             `);
 
@@ -33,7 +34,20 @@ const databasePromise = SQLite.openDatabaseAsync("tasks.db").then(
 );
 
 export async function initDatabase() {
-  await databasePromise;
+  const db = await databasePromise;
+
+  await db.execAsync(`
+        PRAGMA journal_mode = WAL;
+
+        CREATE TABLE IF NOT EXISTS users (
+        
+        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+        username TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        created_at DATETIME DEFAULT (datetime('now', 'localtime'))
+        );
+        
+        `);
 }
 
 export async function getTodos(): Promise<Todo[]> {
@@ -71,4 +85,21 @@ export async function updateTodo(id: number, title: string) {
   const database = await databasePromise;
 
   await database.runAsync("UPDATE todos SET title = ? WHERE id =?", title, id);
+}
+
+export async function createUser(
+  id: number,
+  username: string,
+  password: string,
+  email: string,
+) {
+  const database = await databasePromise;
+
+  await database.runAsync(
+    "UPDATE users SET username = ?, password = ?, email = LOWER(?) WHERE id = ?",
+    username,
+    password,
+    email,
+    id,
+  );
 }

@@ -5,11 +5,18 @@ export const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#E8EAED",
   },
+  landscapeWrapper: {
+    alignSelf: "center",
+    width: "60%",
+    maxWidth: 600,
+  },
+
   taskWrapper: {
     flex: 1,
     paddingTop: 80,
     paddingHorizontal: 20,
     backgroundColor: "#E8EAED",
+    justifyContent: "center",
   },
   code: { textTransform: "uppercase" },
   taskFields: {
