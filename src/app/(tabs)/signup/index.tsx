@@ -1,6 +1,7 @@
 import { ThemedView } from "@/components/themed-view";
-import { createUser, initDatabase } from "@/db/database";
+import { createUser, initDatabase, saveSignedInUser } from "@/db/database";
 import { styles } from "@/styles/home.styles";
+import { Link, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   Pressable,
@@ -11,6 +12,8 @@ import {
 } from "react-native";
 
 export default function Login() {
+  const router = useRouter();
+
   useEffect(() => {
     initDatabase();
   }, []);
@@ -24,11 +27,19 @@ export default function Login() {
 
   const handleSignup = async () => {
     try {
-      await createUser(username, password_hash, email.trim());
+      const trimmedUsername = username.trim();
+      const normalizedEmail = email.trim().toLowerCase();
+
+      await createUser(trimmedUsername, password_hash, normalizedEmail);
+      await saveSignedInUser({
+        username: trimmedUsername,
+        email: normalizedEmail,
+      });
       console.log("User Created");
       setUsername("");
       setPassword_Hash("");
       setEmail("");
+      router.replace("/");
     } catch (e) {
       console.log("Error:", e);
     }
@@ -68,6 +79,14 @@ export default function Login() {
         <Pressable style={styles.button} onPress={handleSignup}>
           <Text style={styles.buttonText}>Sign Up</Text>
         </Pressable>
+
+        <Link href="/(tabs)/login" asChild>
+          <Pressable style={styles.accountLoginButton}>
+            <Text style={styles.accountLoginButtonText}>
+              Already have an account? Log in
+            </Text>
+          </Pressable>
+        </Link>
       </View>
     </ThemedView>
   );

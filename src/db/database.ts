@@ -1,5 +1,13 @@
 import * as SQLite from "expo-sqlite";
+import { Storage } from "expo-sqlite/kv-store";
 import { Todo } from "./todo";
+
+export type SignedInUser = {
+  username: string;
+  email: string;
+};
+
+const signedInUserKey = "signed-in-user";
 
 const databasePromise = SQLite.openDatabaseAsync("tasks.db").then(
   async (database) => {
@@ -102,6 +110,7 @@ export async function createUser(
   password_hash: string,
   email: string,
 ) {
+  await initDatabase();
   const database = await databasePromise;
 
   await database.runAsync(
@@ -112,14 +121,32 @@ export async function createUser(
   );
 }
 
-export async function loginUser(email: string, password_hash: string) {
+export async function saveSignedInUser(user: SignedInUser) {
+  await Storage.setItem(signedInUserKey, JSON.stringify(user));
+}
+
+export async function getSignedInUser(): Promise<SignedInUser | null> {
+  const savedUser = await Storage.getItem(signedInUserKey);
+  if (!savedUser) return null;
+
+  try {
+    return JSON.parse(savedUser) as SignedInUser;
+  } catch {
+    await Storage.removeItem(signedInUserKey);
+    return null;
+  }
+}
+
+export async function loginUser(
+  email: string,
+  password_hash: string,
+): Promise<SignedInUser | null> {
+  await initDatabase();
   const database = await databasePromise;
 
-  const result = await database.getFirstAsync(
-    "SELECT * from users WHERE email = ? AND password_hash = ?",
+  return database.getFirstAsync<SignedInUser>(
+    "SELECT username, email FROM users WHERE email = ? AND password_hash = ?",
     email,
     password_hash,
   );
-
-  return result;
 }

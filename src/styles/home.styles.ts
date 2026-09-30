@@ -115,4 +115,17 @@ export const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
   },
+  accountLoginButton: {
+    alignSelf: "center",
+    marginTop: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#007AFF",
+  },
+  accountLoginButtonText: {
+    color: "#007AFF",
+    fontSize: 14,
+  },
 });

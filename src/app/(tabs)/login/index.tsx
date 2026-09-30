@@ -1,6 +1,7 @@
 import { ThemedView } from "@/components/themed-view";
-import { initDatabase, loginUser } from "@/db/database";
+import { initDatabase, loginUser, saveSignedInUser } from "@/db/database";
 import { styles } from "@/styles/home.styles";
+import { Link, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   Pressable,
@@ -11,6 +12,8 @@ import {
 } from "react-native";
 
 export default function Login() {
+  const router = useRouter();
+
   useEffect(() => {
     initDatabase();
   }, []);
@@ -26,8 +29,10 @@ export default function Login() {
       const user = await loginUser(email.trim().toLowerCase(), password_hash);
 
       if (user) {
+        await saveSignedInUser(user);
         console.log("Login Successful!");
-        console.log("Welcome, ", user);
+        console.log("Welcome, ", user.username);
+        router.replace("/");
       } else {
         console.log("Invalid email or password");
       }
@@ -66,6 +71,13 @@ export default function Login() {
         <Pressable style={styles.button} onPress={handleLogin}>
           <Text style={styles.buttonText}>Login</Text>
         </Pressable>
+        <Link href="/(tabs)/signup" asChild>
+          <Pressable style={styles.accountLoginButton}>
+            <Text style={styles.accountLoginButtonText}>
+              New to ToDo? Sign up
+            </Text>
+          </Pressable>
+        </Link>
       </View>
     </ThemedView>
   );
