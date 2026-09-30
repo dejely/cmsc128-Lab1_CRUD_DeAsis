@@ -1,8 +1,14 @@
 import { ThemedView } from "@/components/themed-view";
-import { initDatabase } from "@/db/database";
+import { createUser, initDatabase } from "@/db/database";
 import { styles } from "@/styles/home.styles";
 import { useEffect, useState } from "react";
-import { TextInput, View, useWindowDimensions } from "react-native";
+import {
+  Pressable,
+  Text,
+  TextInput,
+  View,
+  useWindowDimensions,
+} from "react-native";
 
 export default function Login() {
   useEffect(() => {
@@ -10,11 +16,23 @@ export default function Login() {
   }, []);
 
   const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+  const [password_hash, setPassword_Hash] = useState("");
   const [email, setEmail] = useState("");
 
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
+
+  const handleSignup = async () => {
+    try {
+      await createUser(username, password_hash, email.trim());
+      console.log("User Created");
+      setUsername("");
+      setPassword_Hash("");
+      setEmail("");
+    } catch (e) {
+      console.log("Error:", e);
+    }
+  };
 
   return (
     <ThemedView style={styles.container}>
@@ -36,8 +54,8 @@ export default function Login() {
           style={styles.fieldInput}
           placeholder="Password"
           secureTextEntry
-          value={password}
-          onChangeText={setPassword}
+          value={password_hash}
+          onChangeText={setPassword_Hash}
         />
 
         <TextInput
@@ -46,6 +64,10 @@ export default function Login() {
           value={email}
           onChangeText={setEmail}
         />
+
+        <Pressable style={styles.button} onPress={handleSignup}>
+          <Text style={styles.buttonText}>Sign Up</Text>
+        </Pressable>
       </View>
     </ThemedView>
   );

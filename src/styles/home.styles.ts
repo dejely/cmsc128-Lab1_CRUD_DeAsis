@@ -101,4 +101,18 @@ export const styles = StyleSheet.create({
     paddingBottom: 60,
     paddingHorizontal: 20,
   },
+  button: {
+    backgroundColor: "#007AFF",
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 8,
+    marginTop: 15,
+    alignItems: "center",
+  },
+
+  buttonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
 });

@@ -1,19 +1,43 @@
 import { ThemedView } from "@/components/themed-view";
-import { initDatabase } from "@/db/database";
+import { initDatabase, loginUser } from "@/db/database";
 import { styles } from "@/styles/home.styles";
 import { useEffect, useState } from "react";
-import { TextInput, View, useWindowDimensions } from "react-native";
+import {
+  Pressable,
+  Text,
+  TextInput,
+  View,
+  useWindowDimensions,
+} from "react-native";
 
 export default function Login() {
   useEffect(() => {
     initDatabase();
   }, []);
 
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("");
+  const [password_hash, setPassword_Hash] = useState("");
 
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
+
+  const handleLogin = async () => {
+    try {
+      const user = await loginUser(email.trim().toLowerCase(), password_hash);
+
+      if (user) {
+        console.log("Login Successful!");
+        console.log("Welcome, ", user);
+      } else {
+        console.log("Invalid email or password");
+      }
+
+      setEmail("");
+      setPassword_Hash("");
+    } catch (e) {
+      console.log("Error: ", e);
+    }
+  };
 
   return (
     <ThemedView style={styles.container}>
@@ -26,18 +50,22 @@ export default function Login() {
       >
         <TextInput
           style={styles.fieldInput}
-          placeholder="Username"
-          value={username}
-          onChangeText={setUsername}
+          placeholder="email"
+          value={email}
+          onChangeText={setEmail}
         />
 
         <TextInput
           style={styles.fieldInput}
           placeholder="Password"
           secureTextEntry
-          value={password}
-          onChangeText={setPassword}
+          value={password_hash}
+          onChangeText={setPassword_Hash}
         />
+
+        <Pressable style={styles.button} onPress={handleLogin}>
+          <Text style={styles.buttonText}>Login</Text>
+        </Pressable>
       </View>
     </ThemedView>
   );

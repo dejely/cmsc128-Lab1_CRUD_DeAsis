@@ -9,8 +9,7 @@ const databasePromise = SQLite.openDatabaseAsync("tasks.db").then(
             CREATE TABLE IF NOT EXISTS todos (
             id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
             title TEXT NOT NULL,
-            completed INTEGER NOT NULL DEFAULT 0,
-            email TEXT NOT NULL CHECK (email = LOWER(email))
+            completed INTEGER NOT NULL DEFAULT 0
             );
             `);
 
@@ -44,10 +43,21 @@ export async function initDatabase() {
         id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
         username TEXT NOT NULL UNIQUE,
         password_hash TEXT NOT NULL,
-        created_at DATETIME DEFAULT (datetime('now', 'localtime'))
+        created_at DATETIME DEFAULT (datetime('now', 'localtime')),
+        email TEXT NOT NULL CHECK (email = LOWER(email)) UNIQUE
         );
         
         `);
+
+  // for migration:
+  const userColumns = await db.getAllAsync<{ name: string }>(
+    "PRAGMA table_info(users)",
+  );
+  if (!userColumns.some((column) => column.name === "email")) {
+    await db.execAsync(
+      "ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT '' CHECK (email = LOWER(email))",
+    );
+  }
 }
 
 export async function getTodos(): Promise<Todo[]> {
@@ -88,18 +98,28 @@ export async function updateTodo(id: number, title: string) {
 }
 
 export async function createUser(
-  id: number,
   username: string,
-  password: string,
+  password_hash: string,
   email: string,
 ) {
   const database = await databasePromise;
 
   await database.runAsync(
-    "UPDATE users SET username = ?, password = ?, email = LOWER(?) WHERE id = ?",
+    "INSERT INTO users (username, password_hash, email) VALUES (?, ?, ?)",
     username,
-    password,
+    password_hash,
     email,
-    id,
   );
+}
+
+export async function loginUser(email: string, password_hash: string) {
+  const database = await databasePromise;
+
+  const result = await database.getFirstAsync(
+    "SELECT * from users WHERE email = ? AND password_hash = ?",
+    email,
+    password_hash,
+  );
+
+  return result;
 }
