@@ -13,34 +13,29 @@ import {
 
 export default function Login() {
   const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [passwordHash, setPasswordHash] = useState("");
+  const { width, height } = useWindowDimensions();
+  const isLandscape = width > height;
 
   useEffect(() => {
     initDatabase();
   }, []);
 
-  const [email, setEmail] = useState("");
-  const [password_hash, setPassword_Hash] = useState("");
-
-  const { width, height } = useWindowDimensions();
-  const isLandscape = width > height;
-
   const handleLogin = async () => {
     try {
-      const user = await loginUser(email.trim().toLowerCase(), password_hash);
+      const user = await loginUser(email.trim().toLowerCase(), passwordHash);
 
       if (user) {
         await saveSignedInUser(user);
-        console.log("Login Successful!");
-        console.log("Welcome, ", user.username);
+        setEmail("");
+        setPasswordHash("");
         router.replace("/");
       } else {
         console.log("Invalid email or password");
       }
-
-      setEmail("");
-      setPassword_Hash("");
-    } catch (e) {
-      console.log("Error: ", e);
+    } catch (error) {
+      console.log("Error:", error);
     }
   };
 
@@ -55,22 +50,25 @@ export default function Login() {
       >
         <TextInput
           style={styles.fieldInput}
-          placeholder="email"
+          placeholder="Email"
           value={email}
           onChangeText={setEmail}
+          autoCapitalize="none"
+          keyboardType="email-address"
         />
 
         <TextInput
           style={styles.fieldInput}
           placeholder="Password"
           secureTextEntry
-          value={password_hash}
-          onChangeText={setPassword_Hash}
+          value={passwordHash}
+          onChangeText={setPasswordHash}
         />
 
         <Pressable style={styles.button} onPress={handleLogin}>
           <Text style={styles.buttonText}>Login</Text>
         </Pressable>
+
         <Link href="/(tabs)/signup" asChild>
           <Pressable style={styles.accountLoginButton}>
             <Text style={styles.accountLoginButtonText}>
