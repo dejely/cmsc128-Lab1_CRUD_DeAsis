@@ -5,11 +5,18 @@ export const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#E8EAED",
   },
+  landscapeWrapper: {
+    alignSelf: "center",
+    width: "60%",
+    maxWidth: 600,
+  },
+
   taskWrapper: {
     flex: 1,
     paddingTop: 80,
     paddingHorizontal: 20,
     backgroundColor: "#E8EAED",
+    justifyContent: "center",
   },
   code: { textTransform: "uppercase" },
   taskFields: {
@@ -93,5 +100,32 @@ export const styles = StyleSheet.create({
   keyboardWrapper: {
     paddingBottom: 60,
     paddingHorizontal: 20,
+  },
+  button: {
+    backgroundColor: "#007AFF",
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 8,
+    marginTop: 15,
+    alignItems: "center",
+  },
+
+  buttonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  accountLoginButton: {
+    alignSelf: "center",
+    marginTop: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#007AFF",
+  },
+  accountLoginButtonText: {
+    color: "#007AFF",
+    fontSize: 14,
   },
 });
