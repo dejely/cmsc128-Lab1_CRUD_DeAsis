@@ -3,6 +3,7 @@ import Task from "@/components/todoButtons";
 import {
   addTodo,
   deleteTodo,
+  getSignedInUser,
   getTodos,
   initDatabase,
   updateTodo,
@@ -11,6 +12,7 @@ import type { Todo } from "@/db/todo";
 import { styles } from "@/styles/home.styles";
 import DateTimePicker from "@expo/ui/community/datetime-picker";
 import Feather from "@expo/vector-icons/Feather";
+import { Redirect } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   Alert,
@@ -36,6 +38,7 @@ export default function HomeScreen() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false); // for the calendar ltr
   const [showTaskOptions, setShowTaskOptions] = useState(false);
+  const [isSignedIn, setIsSignedIn] = useState<boolean | null>(null);
 
   const hideTaskOptions = () => {
     setShowTaskOptions(false);
@@ -48,11 +51,19 @@ export default function HomeScreen() {
     async function loadTodos() {
       try {
         await initDatabase(); // init
+        const user = await getSignedInUser();
+
+        if (!user) {
+          setIsSignedIn(false);
+          return;
+        }
 
         const savedTodos = await getTodos();
         setTaskItems(savedTodos);
+        setIsSignedIn(true);
       } catch (e) {
         console.error("failed to load todos", e);
+        setIsSignedIn(false);
       }
     }
     loadTodos();
@@ -174,6 +185,9 @@ export default function HomeScreen() {
       Alert.alert("Update failed", "Please try again.");
     }
   };
+
+  if (isSignedIn === null) return null;
+  if (!isSignedIn) return <Redirect href="/signup" />;
 
   return (
     <ThemedView style={styles.container}>
