@@ -1,5 +1,5 @@
+import { useAuth } from "@/auth/AuthContext";
 import { ThemedView } from "@/components/themed-view";
-import { signUp, useSession } from "@/services/api";
 import { styles } from "@/styles/home.styles";
 import { Link, Redirect, useRouter } from "expo-router";
 import { useState } from "react";
@@ -13,38 +13,43 @@ import {
 
 export default function Signup() {
   const router = useRouter();
+  const { user, loading, registerAccount } = useAuth();
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const session = useSession();
 
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
 
-  const handleSignup = async () => {
-    if (busy) return;
-    setBusy(true);
-    setError("");
-    try {
-      const trimmedUsername = username.trim();
-      const normalizedEmail = email.trim().toLowerCase();
+  if (loading) {
+    return null;
+  }
 
-      await signUp(trimmedUsername, normalizedEmail, password);
+  if (user) {
+    return <Redirect href="/" />;
+  }
+  const handleSignup = async () => {
+    const trimmedUsername = username.trim();
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (!trimmedUsername || !normalizedEmail || !password) {
+      setError("Enter a username, email, and password.");
+      return;
+    }
+
+    try {
+      setError("");
+      await registerAccount(trimmedUsername, normalizedEmail, password);
       setUsername("");
       setPassword("");
       setEmail("");
       router.replace("/");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Signup failed");
-    } finally {
-      setBusy(false);
+      setError(e instanceof Error ? e.message : "Registration failed.");
     }
   };
-
-  if (session) return <Redirect href="/" />;
 
   return (
     <ThemedView style={styles.container}>
@@ -60,16 +65,15 @@ export default function Signup() {
           placeholder="Username"
           value={username}
           onChangeText={setUsername}
+          autoCapitalize="none"
         />
 
         <TextInput
           style={styles.fieldInput}
-          placeholder="Password"
+          placeholder="Password (8+ characters)"
           secureTextEntry
           value={password}
           onChangeText={setPassword}
-          autoCapitalize="none"
-          autoCorrect={false}
         />
 
         <TextInput
@@ -81,10 +85,14 @@ export default function Signup() {
           keyboardType="email-address"
         />
 
-        {error ? <Text accessibilityRole="alert" style={{ color: "#B91C1C" }}>{error}</Text> : null}
-        <Text>Use at least 8 characters. Long passwords with emoji or accented letters may exceed the length limit.</Text>
-        <Pressable style={styles.button} onPress={handleSignup} disabled={busy}>
-          <Text style={styles.buttonText}>{busy ? "Creating account…" : "Sign Up"}</Text>
+        {error ? (
+          <Text accessibilityRole="alert" style={{ color: "#B91C1C" }}>
+            {error}
+          </Text>
+        ) : null}
+
+        <Pressable style={styles.button} onPress={handleSignup}>
+          <Text style={styles.buttonText}>Sign Up</Text>
         </Pressable>
 
         <Link href="/(tabs)/login" asChild>

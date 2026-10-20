@@ -1,5 +1,5 @@
+import { useAuth } from "@/auth/AuthContext";
 import { ThemedView } from "@/components/themed-view";
-import { signIn, useSession } from "@/services/api";
 import { styles } from "@/styles/home.styles";
 import { Link, Redirect, useRouter } from "expo-router";
 import { useState } from "react";
@@ -13,31 +13,41 @@ import {
 
 export default function Login() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const { user, loading, signInWithCredentials } = useAuth();
+
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const session = useSession();
+
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
 
+  if (loading) {
+    return null;
+  }
+
+  if (user) {
+    return <Redirect href="/" />;
+  }
+
   const handleLogin = async () => {
-    if (busy) return;
-    setBusy(true);
-    setError("");
+    const trimmedIdentifier = identifier.trim();
+
+    if (!trimmedIdentifier || !password) {
+      setError("Enter your username/email and password.");
+      return;
+    }
+
     try {
-      await signIn(email.trim().toLowerCase(), password);
-      setEmail("");
+      setError("");
+      await signInWithCredentials(trimmedIdentifier, password);
+      setIdentifier("");
       setPassword("");
       router.replace("/");
-    } catch (error) {
-      setError(error instanceof Error ? error.message : "Login failed");
-    } finally {
-      setBusy(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Login failed.");
     }
   };
-
-  if (session) return <Redirect href="/" />;
 
   return (
     <ThemedView style={styles.container}>
@@ -50,11 +60,10 @@ export default function Login() {
       >
         <TextInput
           style={styles.fieldInput}
-          placeholder="Email"
-          value={email}
-          onChangeText={setEmail}
+          placeholder="Username or Email"
+          value={identifier}
+          onChangeText={setIdentifier}
           autoCapitalize="none"
-          keyboardType="email-address"
         />
 
         <TextInput
@@ -63,14 +72,25 @@ export default function Login() {
           secureTextEntry
           value={password}
           onChangeText={setPassword}
-          autoCapitalize="none"
-          autoCorrect={false}
         />
 
-        {error ? <Text accessibilityRole="alert" style={{ color: "#B91C1C" }}>{error}</Text> : null}
-        <Pressable style={styles.button} onPress={handleLogin} disabled={busy}>
-          <Text style={styles.buttonText}>{busy ? "Signing in…" : "Login"}</Text>
+        {error ? (
+          <Text accessibilityRole="alert" style={{ color: "#B91C1C" }}>
+            {error}
+          </Text>
+        ) : null}
+
+        <Pressable style={styles.button} onPress={handleLogin}>
+          <Text style={styles.buttonText}>Login</Text>
         </Pressable>
+
+        <Link href="/forgot-password" asChild>
+          <Pressable style={styles.accountLoginButton}>
+            <Text style={styles.accountLoginButtonText}>
+              Forgot your password?
+            </Text>
+          </Pressable>
+        </Link>
 
         <Link href="/(tabs)/signup" asChild>
           <Pressable style={styles.accountLoginButton}>

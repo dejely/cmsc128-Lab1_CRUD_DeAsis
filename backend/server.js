@@ -14,8 +14,9 @@ const jwtSecret = process.env.JWT_SECRET;
 if (!jwtSecret || Buffer.byteLength(jwtSecret) < 32) {
   throw new Error("Set JWT_SECRET to a random secret of at least 32 bytes");
 }
-const db = openDatabase(process.env.DB_PATH || path.join(__dirname, "data.sqlite"));
-const app = createApp({ db, jwtSecret, origins: process.env.CORS_ORIGINS });
+const db = openDatabase(path.resolve(__dirname, process.env.DB_PATH || "data.sqlite"));
+const { sendResetEmail } = require("./mailer");
+const app = createApp({ db, jwtSecret, origins: process.env.CORS_ORIGINS, sendResetEmail });
 const server = app.listen(port, "0.0.0.0", () => {
   console.log(`Server running on port ${port}`);
 });
