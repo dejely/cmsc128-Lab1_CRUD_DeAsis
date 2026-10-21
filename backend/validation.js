@@ -46,11 +46,13 @@ function todoBody(body, partial = false) {
     if (![0, 1].includes(result.completed)) throw new HttpError(400, "Completed must be 0 or 1");
   }
   if (!partial || Object.hasOwn(body, "dueDate")) {
+    if (body.dueDate === null) { result.dueDate = null; } else {
     if (typeof body.dueDate !== "string" || !Number.isFinite(Date.parse(body.dueDate)) ||
         new Date(body.dueDate).toISOString() !== body.dueDate) {
       throw new HttpError(400, "Due date must be a valid ISO timestamp");
     }
     result.dueDate = body.dueDate;
+    }
   }
   for (const [key, values] of Object.entries({
     priority: ["Low", "Medium", "High"], category: ["School", "Personal", "Others"],
@@ -70,4 +72,4 @@ function taskId(value) {
   return Number(value);
 }
 
-module.exports = { HttpError, credentials, todoBody, taskId };
+module.exports = { HttpError, credentials, todoBody, taskId, objectBody };

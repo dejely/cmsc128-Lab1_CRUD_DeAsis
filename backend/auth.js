@@ -7,7 +7,7 @@ function createAuth(db, secret) {
   function issue(user) {
     const id = crypto.randomUUID();
     const token = jwt.sign({}, secret, {
-      ...jwtOptions, subject: String(user.id), jwtid: id, expiresIn: "1h",
+      ...jwtOptions, subject: String(user.id), jwtid: id, expiresIn: process.env.JWT_EXPIRES_IN || "1h",
     });
     const { exp } = jwt.decode(token);
     db.prepare("DELETE FROM sessions WHERE expires_at <= ?").run(Math.floor(Date.now() / 1000));
@@ -37,6 +37,7 @@ function createAuth(db, secret) {
     `).get(claims.jti, Number(claims.sub), Math.floor(Date.now() / 1000));
     if (!user) return next(new HttpError(401, "Session expired or revoked"));
     req.user = user;
+    req.userId = user.id;
     req.sessionId = claims.jti;
     next();
   }

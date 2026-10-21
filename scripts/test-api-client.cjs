@@ -5,103 +5,107 @@ const path = require("node:path");
 const vm = require("node:vm");
 const ts = require("typescript");
 
-// Execute the real client; React's external-store hook is reduced to its snapshot
-// boundary here. These tests do not simulate rendering or native navigation.
+// Exercise the real client against a mocked transport and SecureStore boundary.
+// Native navigation and the device SQLite sync queue need device validation.
 function client(fetch, url = "http://localhost:3000/") {
   const source = readFileSync(path.join(__dirname, "../src/services/api.ts"), "utf8");
   const { outputText } = ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   });
   const exports = {};
+  const storage = new Map();
   vm.runInNewContext(outputText, {
     exports,
     require(name) {
-      assert.equal(name, "react");
-      return { useSyncExternalStore: (_subscribe, snapshot) => snapshot() };
+      assert.equal(name, "expo-secure-store");
+      return {
+        getItemAsync: async key => storage.get(key) || null,
+        setItemAsync: async (key, value) => { storage.set(key, value); },
+        deleteItemAsync: async key => { storage.delete(key); },
+      };
     },
     process: { env: { EXPO_PUBLIC_API_BASE_URL: url } },
-    fetch, AbortController, setTimeout, clearTimeout,
+    fetch, Headers, AbortController, setTimeout, clearTimeout,
   });
   return exports;
 }
-function session(token) {
-  return { token, user: { id: 1, username: "banana", email: "banana@example.test" } };
-}
+const session = token => ({ token, user: { id: 1, username: "banana", email: "banana@example.test" } });
 const json = (body, status = 200) => new Response(JSON.stringify(body), {
   status, headers: { "Content-Type": "application/json" },
 });
 
-test("login sends credentials, protected requests attach tokens, and logout clears the session", async () => {
+test("login and registration remain compatible with main's API; logout uses the server session", async () => {
   const calls = [];
   const api = client(async (url, options) => {
     calls.push({ url, options });
-    if (url.endsWith("/auth/login")) return json(session("first-token"));
+    if (url.endsWith("/auth/login") || url.endsWith("/auth/register")) return json(session("token"));
     if (url.endsWith("/auth/logout")) return new Response(null, { status: 204 });
     return json({ todos: [] });
   });
-  assert.equal(api.useSession(), null);
-  await assert.rejects(api.request("/todos"), /Please sign in/);
+  await assert.rejects(api.apiRequest("/todos"), /Please sign in/);
   assert.equal(calls.length, 0);
-  await api.signIn("banana@example.test", "password");
-  assert.equal(api.useSession().user.username, "banana");
-  assert.equal(calls[0].url, "http://localhost:3000/auth/login");
-  assert.deepEqual(JSON.parse(calls[0].options.body), { email: "banana@example.test", password: "password" });
-  assert.equal(calls[0].options.headers.Authorization, undefined);
-  await api.request("/todos");
-  assert.equal(calls[1].options.headers.Authorization, "Bearer first-token");
+  const login = await api.login("banana", "password");
+  assert.deepEqual(JSON.parse(calls[0].options.body), { identifier: "banana", password: "password" });
+  assert.equal(calls[0].options.headers.get("Authorization"), null);
+  await api.saveAuthToken(login.token);
+  assert.equal(await api.getAuthToken(), "token");
+  await api.apiRequest("/todos");
+  assert.equal(calls[1].options.headers.get("Authorization"), "Bearer token");
   assert.ok(calls[1].options.signal instanceof AbortSignal);
-  await api.signOut();
-  assert.equal(api.useSession(), null);
-  assert.equal(calls[2].options.headers.Authorization, "Bearer first-token");
+  await api.logout();
+  assert.equal(calls[2].url, "http://localhost:3000/auth/logout");
+  await api.removeAuthToken();
+  assert.equal(await api.getAuthToken(), null);
+  await api.register("banana", "banana@example.test", "password");
+  assert.ok(calls[3].url.endsWith("/auth/register"));
 });
 
-test("signup creates an authenticated session and surfaces validation errors", async () => {
-  let fail = true;
-  const api = client(async () => fail ? json({ error: "Email is invalid" }, 400) : json(session("signup-token"), 201));
-  await assert.rejects(api.signUp("banana", "invalid", "password"), /Email is invalid/);
-  assert.equal(api.useSession(), null);
-  fail = false;
-  await api.signUp("banana", "banana@example.test", "password");
-  assert.equal(api.useSession().token, "signup-token");
+test("public authentication errors never clear a saved token", async () => {
+  const api = client(async () => json({ error: "Invalid credentials" }, 401));
+  await api.saveAuthToken("existing-token");
+  await assert.rejects(api.login("banana", "bad-password"), /Invalid credentials/);
+  assert.equal(await api.getAuthToken(), "existing-token");
 });
 
-test("a protected 401 clears the session; network errors and other statuses preserve it", async () => {
-  let result = 200;
-  const api = client(async url => {
-    if (url.endsWith("/auth/login")) return json(session("token"));
+test("a protected 401 clears the token and notifies auth; network and other errors preserve it", async () => {
+  let result = "network";
+  let notifications = 0;
+  const api = client(async () => {
     if (result === "network") throw new TypeError("offline");
-    return json({ error: "Request denied" }, result);
+    return json({ error: "Denied" }, result);
   });
-  await api.signIn("banana@example.test", "password");
-  result = "network";
-  await assert.rejects(api.request("/todos"), /Cannot reach the server/);
-  assert.equal(api.useSession().token, "token");
+  await api.saveAuthToken("token");
+  api.subscribeToUnauthorized(() => notifications++);
+  await assert.rejects(api.apiRequest("/todos"), /Network request failed/);
+  assert.equal(await api.getAuthToken(), "token");
   result = 403;
-  await assert.rejects(api.request("/todos"), /Request denied/);
-  assert.equal(api.useSession().token, "token");
+  await assert.rejects(api.apiRequest("/todos"), /Denied/);
+  assert.equal(await api.getAuthToken(), "token");
   result = 401;
-  await assert.rejects(api.request("/todos"), /Request denied/);
-  assert.equal(api.useSession(), null);
+  await assert.rejects(api.apiRequest("/todos"), /Denied/);
+  assert.equal(await api.getAuthToken(), null);
+  assert.equal(notifications, 1);
 });
 
-test("an old request's 401 cannot clear a newly signed-in session", async () => {
+test("an old request's 401 cannot clear a newly saved login", async () => {
   let finishOldRequest;
-  let logins = 0;
-  const api = client(async url => {
-    if (url.endsWith("/auth/login")) return json(session(`token-${++logins}`));
-    return await new Promise(resolve => { finishOldRequest = resolve; });
-  });
-  await api.signIn("banana@example.test", "password");
-  const oldRequest = api.request("/todos");
-  const rejected = assert.rejects(oldRequest, /Expired/);
-  await api.signIn("banana@example.test", "password");
+  let fetched;
+  const ready = new Promise(resolve => { fetched = resolve; });
+  const api = client(async () => await new Promise(resolve => {
+    finishOldRequest = resolve;
+    fetched();
+  }));
+  await api.saveAuthToken("old-token");
+  const rejected = assert.rejects(api.apiRequest("/todos"), /Expired/);
+  await ready;
+  await api.saveAuthToken("new-token");
   finishOldRequest(json({ error: "Expired" }, 401));
   await rejected;
-  assert.equal(api.useSession().token, "token-2");
+  assert.equal(await api.getAuthToken(), "new-token");
 });
 
 test("missing API configuration fails before sending credentials", async () => {
   const api = client(() => { throw new Error("Fetch must not run"); }, "");
-  await assert.rejects(api.signIn("banana@example.test", "password"), /EXPO_PUBLIC_API_BASE_URL/);
-  assert.equal(api.useSession(), null);
+  await assert.rejects(api.login("banana", "password"), /EXPO_PUBLIC_API_BASE_URL/);
+  assert.equal(await api.getAuthToken(), null);
 });
