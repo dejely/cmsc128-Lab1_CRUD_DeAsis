@@ -3,13 +3,12 @@ import Task from "@/components/todoButtons";
 import {
   addTodo,
   deleteTodo,
-  getSignedInUser,
   getTodos,
-  initDatabase,
   updateTodo,
 } from "@/db/database";
 import type { Todo } from "@/db/todo";
 import { styles } from "@/styles/home.styles";
+import { signOut, useSession } from "@/services/api";
 import DateTimePicker from "@expo/ui/community/datetime-picker";
 import Feather from "@expo/vector-icons/Feather";
 import { Redirect } from "expo-router";
@@ -27,6 +26,13 @@ import {
 } from "react-native";
 
 export default function HomeScreen() {
+  const session = useSession();
+  if (!session) return <Redirect href="/signup" />;
+  // Remount account-specific state on each login, including pending undo state.
+  return <TasksScreen key={session.token} />;
+}
+
+function TasksScreen() {
   const [task, setTask] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [priority, setPriority] = useState<Todo["priority"]>("Medium");
@@ -38,7 +44,10 @@ export default function HomeScreen() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false); // for the calendar ltr
   const [showTaskOptions, setShowTaskOptions] = useState(false);
-  const [isSignedIn, setIsSignedIn] = useState<boolean | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [reload, setReload] = useState(0);
+  const [busy, setBusy] = useState(false);
 
   const hideTaskOptions = () => {
     setShowTaskOptions(false);
@@ -48,28 +57,41 @@ export default function HomeScreen() {
   };
 
   useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setLoadError("");
     async function loadTodos() {
       try {
-        await initDatabase(); // init
-        const user = await getSignedInUser();
-
-        if (!user) {
-          setIsSignedIn(false);
-          return;
-        }
-
         const savedTodos = await getTodos();
-        setTaskItems(savedTodos);
-        setIsSignedIn(true);
+        if (active) setTaskItems(savedTodos);
       } catch (e) {
-        console.error("failed to load todos", e);
-        setIsSignedIn(false);
+        if (active) setLoadError(e instanceof Error ? e.message : "Failed to load tasks");
+      } finally {
+        if (active) setLoading(false);
       }
     }
     loadTodos();
+    return () => { active = false; };
+  }, [reload]);
+
+  useEffect(() => () => {
+    if (deleteTimer.current) clearTimeout(deleteTimer.current);
   }, []);
 
+  const handleLogout = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await signOut();
+    } catch (error) {
+      Alert.alert("Sign out failed", error instanceof Error ? error.message : "Please try again");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleAddTask = async () => {
+    if (busy) return;
     setShowTaskOptions(true);
     const trimmedTask = task.trim(); //trim for white spaces and nl
 
@@ -92,13 +114,12 @@ export default function HomeScreen() {
     }
 
     try {
+      setBusy(true);
       setFormError("");
       Keyboard.dismiss();
 
-      await addTodo(trimmedTask, date.toISOString(), priority, category);
-
-      const updatedTodos = await getTodos();
-      setTaskItems(updatedTodos);
+      const created = await addTodo(trimmedTask, date.toISOString(), priority, category);
+      setTaskItems(items => [created, ...items]);
 
       setTask("");
       setDueDate("");
@@ -107,7 +128,9 @@ export default function HomeScreen() {
       hideTaskOptions();
     } catch (e) {
       console.error("Failed to add todo:", e);
-      setFormError("Failed to add task. Please try again.");
+      setFormError(e instanceof Error ? e.message : "Failed to add task");
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -122,31 +145,46 @@ export default function HomeScreen() {
     ]);
   };
 
-  // ignore warning
-  const handleDeleteTask = (id: number) => {
+  const handleDeleteTask = async (id: number) => {
+    if (busy) return;
     const todo = taskItems.find((item) => item.id === id); //find tasks whos id matches it
 
     // if no task was found, stop.
     if (!todo) return;
 
-    // remove it visually
-    setTaskItems((items) => items.filter((item) => item.id !== id));
-    setDeletedTask(todo);
-
-    // reset an existing undo timer
-    if (deleteTimer.current) {
-      clearTimeout(deleteTimer.current);
-    }
-
-    // Permanently delete after 3 seconds
-    deleteTimer.current = setTimeout(async () => {
-      try {
-        await deleteTodo(todo.id);
+    setBusy(true);
+    try {
+      await deleteTodo(todo.id);
+      setTaskItems(items => items.filter(item => item.id !== id));
+      setDeletedTask(todo);
+      if (deleteTimer.current) clearTimeout(deleteTimer.current);
+      // Only the undo banner is timed; no delayed request can run as another user.
+      deleteTimer.current = setTimeout(() => {
         setDeletedTask(null);
-      } catch (e) {
-        console.error("Failed to delete todo:", e);
-      }
-    }, 3000);
+        deleteTimer.current = null;
+      }, 3000);
+    } catch (error) {
+      Alert.alert("Delete failed", error instanceof Error ? error.message : "Please try again");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleUndo = async () => {
+    if (busy || !deletedTask || !deletedTask.dueDate) return;
+    const todo = deletedTask;
+    if (deleteTimer.current) clearTimeout(deleteTimer.current);
+    deleteTimer.current = null;
+    setBusy(true);
+    try {
+      const restored = await addTodo(todo.title, todo.dueDate!, todo.priority, todo.category, todo.completed);
+      setTaskItems(items => [restored, ...items]);
+      setDeletedTask(null);
+    } catch (error) {
+      Alert.alert("Undo failed", error instanceof Error ? error.message : "Please try again");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleEditTask = (todo: Todo) => {
@@ -163,17 +201,19 @@ export default function HomeScreen() {
   };
   // edit fn
   const handleUpdateTask = async () => {
+    if (busy) return;
     const title = task.trim();
     if (editingId === null || title.length === 0) return; // not allowed
 
     try {
-      await updateTodo(editingId, title); // call fn from db
+      setBusy(true);
+      const updated = await updateTodo(editingId, title);
 
       setTaskItems((items) =>
         items.map(
           (
             item, //iterate
-          ) => (item.id === editingId ? { ...item, title } : item),
+          ) => (item.id === updated.id ? updated : item),
         ),
       );
 
@@ -182,25 +222,36 @@ export default function HomeScreen() {
       Keyboard.dismiss(); // take away android keyboard
     } catch (e) {
       console.error("Failed to upload todo:", e);
-      Alert.alert("Update failed", "Please try again.");
+      Alert.alert("Update failed", e instanceof Error ? e.message : "Please try again");
+    } finally {
+      setBusy(false);
     }
   };
 
-  if (isSignedIn === null) return null;
-  if (!isSignedIn) return <Redirect href="/signup" />;
+  if (loading || loadError) return (
+    <ThemedView style={styles.container}>
+      <Text accessibilityRole="alert">{loading ? "Loading tasks…" : loadError}</Text>
+      {!loading && <TouchableOpacity onPress={() => setReload(value => value + 1)}><Text>Retry</Text></TouchableOpacity>}
+      <TouchableOpacity onPress={handleLogout} disabled={busy}><Text>Sign out</Text></TouchableOpacity>
+    </ThemedView>
+  );
 
   return (
     <ThemedView style={styles.container}>
       {/* Title */}
       <View style={styles.taskWrapper}>
         <Text style={styles.title}>Todo List</Text>
+        <TouchableOpacity onPress={handleLogout} disabled={busy} accessibilityRole="button">
+          <Text>Sign out</Text>
+        </TouchableOpacity>
+        {busy ? <Text>Saving…</Text> : null}
         <ScrollView>
           {/* Todo list here */}
           {taskItems.map((item) => (
             <View key={item.id} style={styles.taskRow}>
               <TouchableOpacity
                 style={{ flex: 1 }}
-                disabled={editingId !== null}
+                disabled={editingId !== null || busy}
                 onPress={() => confirmDeleteTask(item.id)}
               >
                 <Task text={item.title} />
@@ -243,6 +294,7 @@ export default function HomeScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={`Edit ${item.title}`}
                 onPress={() => handleEditTask(item)}
+                disabled={busy}
               >
                 <Feather name="edit-2" size={22} color="#2563EB" />
               </TouchableOpacity>
@@ -256,19 +308,8 @@ export default function HomeScreen() {
           <Text style={{ color: "#fff" }}> Task Deleted</Text>
 
           <TouchableOpacity
-            onPress={() => {
-              const todo = deletedTask;
-              if (!todo) return;
-
-              // set it back
-              if (deleteTimer.current !== null) {
-                clearTimeout(deleteTimer.current);
-                deleteTimer.current = null;
-              }
-
-              setTaskItems((items) => [...items, todo]); // Restore the deleted task
-              setDeletedTask(null); // hide the banner after clicking
-            }}
+            onPress={handleUndo}
+            disabled={busy}
           >
             <Text style={styles.undoText}>UNDO</Text>
           </TouchableOpacity>
@@ -338,6 +379,7 @@ export default function HomeScreen() {
             } // switch the labels if
             value={task}
             onChangeText={(text) => setTask(text)}
+            editable={!busy}
           />
 
           {editingId === null && showTaskOptions && (
@@ -360,6 +402,7 @@ export default function HomeScreen() {
               editingId !== null ? "Save changes" : "Add task"
             }
             onPress={editingId !== null ? handleUpdateTask : handleAddTask}
+            disabled={busy}
           >
             <View style={styles.addWrapper}>
               <Text style={styles.addText}>
@@ -370,7 +413,7 @@ export default function HomeScreen() {
           </TouchableOpacity>
 
           {editingId !== null && (
-            <TouchableOpacity onPress={handleCancelEdit}>
+            <TouchableOpacity onPress={handleCancelEdit} disabled={busy}>
               <Text> Cancel </Text>
             </TouchableOpacity>
           )}

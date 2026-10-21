@@ -1,8 +1,8 @@
 import { ThemedView } from "@/components/themed-view";
-import { createUser, initDatabase, saveSignedInUser } from "@/db/database";
+import { signUp, useSession } from "@/services/api";
 import { styles } from "@/styles/home.styles";
-import { Link, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { Link, Redirect, useRouter } from "expo-router";
+import { useState } from "react";
 import {
   Pressable,
   Text,
@@ -11,39 +11,40 @@ import {
   useWindowDimensions,
 } from "react-native";
 
-export default function Login() {
+export default function Signup() {
   const router = useRouter();
 
-  useEffect(() => {
-    initDatabase();
-  }, []);
-
   const [username, setUsername] = useState("");
-  const [password_hash, setPassword_Hash] = useState("");
+  const [password, setPassword] = useState("");
   const [email, setEmail] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const session = useSession();
 
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
 
   const handleSignup = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError("");
     try {
       const trimmedUsername = username.trim();
       const normalizedEmail = email.trim().toLowerCase();
 
-      await createUser(trimmedUsername, password_hash, normalizedEmail);
-      await saveSignedInUser({
-        username: trimmedUsername,
-        email: normalizedEmail,
-      });
-      console.log("User Created");
+      await signUp(trimmedUsername, normalizedEmail, password);
       setUsername("");
-      setPassword_Hash("");
+      setPassword("");
       setEmail("");
       router.replace("/");
     } catch (e) {
-      console.log("Error:", e);
+      setError(e instanceof Error ? e.message : "Signup failed");
+    } finally {
+      setBusy(false);
     }
   };
+
+  if (session) return <Redirect href="/" />;
 
   return (
     <ThemedView style={styles.container}>
@@ -65,8 +66,10 @@ export default function Login() {
           style={styles.fieldInput}
           placeholder="Password"
           secureTextEntry
-          value={password_hash}
-          onChangeText={setPassword_Hash}
+          value={password}
+          onChangeText={setPassword}
+          autoCapitalize="none"
+          autoCorrect={false}
         />
 
         <TextInput
@@ -74,10 +77,14 @@ export default function Login() {
           placeholder="Email"
           value={email}
           onChangeText={setEmail}
+          autoCapitalize="none"
+          keyboardType="email-address"
         />
 
-        <Pressable style={styles.button} onPress={handleSignup}>
-          <Text style={styles.buttonText}>Sign Up</Text>
+        {error ? <Text accessibilityRole="alert" style={{ color: "#B91C1C" }}>{error}</Text> : null}
+        <Text>Use at least 8 characters. Long passwords with emoji or accented letters may exceed the length limit.</Text>
+        <Pressable style={styles.button} onPress={handleSignup} disabled={busy}>
+          <Text style={styles.buttonText}>{busy ? "Creating account…" : "Sign Up"}</Text>
         </Pressable>
 
         <Link href="/(tabs)/login" asChild>

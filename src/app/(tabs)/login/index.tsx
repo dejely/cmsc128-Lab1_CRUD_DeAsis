@@ -1,8 +1,8 @@
 import { ThemedView } from "@/components/themed-view";
-import { initDatabase, loginUser, saveSignedInUser } from "@/db/database";
+import { signIn, useSession } from "@/services/api";
 import { styles } from "@/styles/home.styles";
-import { Link, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { Link, Redirect, useRouter } from "expo-router";
+import { useState } from "react";
 import {
   Pressable,
   Text,
@@ -14,30 +14,30 @@ import {
 export default function Login() {
   const router = useRouter();
   const [email, setEmail] = useState("");
-  const [passwordHash, setPasswordHash] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const session = useSession();
   const { width, height } = useWindowDimensions();
   const isLandscape = width > height;
 
-  useEffect(() => {
-    initDatabase();
-  }, []);
-
   const handleLogin = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError("");
     try {
-      const user = await loginUser(email.trim().toLowerCase(), passwordHash);
-
-      if (user) {
-        await saveSignedInUser(user);
-        setEmail("");
-        setPasswordHash("");
-        router.replace("/");
-      } else {
-        console.log("Invalid email or password");
-      }
+      await signIn(email.trim().toLowerCase(), password);
+      setEmail("");
+      setPassword("");
+      router.replace("/");
     } catch (error) {
-      console.log("Error:", error);
+      setError(error instanceof Error ? error.message : "Login failed");
+    } finally {
+      setBusy(false);
     }
   };
+
+  if (session) return <Redirect href="/" />;
 
   return (
     <ThemedView style={styles.container}>
@@ -61,12 +61,15 @@ export default function Login() {
           style={styles.fieldInput}
           placeholder="Password"
           secureTextEntry
-          value={passwordHash}
-          onChangeText={setPasswordHash}
+          value={password}
+          onChangeText={setPassword}
+          autoCapitalize="none"
+          autoCorrect={false}
         />
 
-        <Pressable style={styles.button} onPress={handleLogin}>
-          <Text style={styles.buttonText}>Login</Text>
+        {error ? <Text accessibilityRole="alert" style={{ color: "#B91C1C" }}>{error}</Text> : null}
+        <Pressable style={styles.button} onPress={handleLogin} disabled={busy}>
+          <Text style={styles.buttonText}>{busy ? "Signing in…" : "Login"}</Text>
         </Pressable>
 
         <Link href="/(tabs)/signup" asChild>
