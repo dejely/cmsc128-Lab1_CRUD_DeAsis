@@ -30,7 +30,13 @@ import {
 
 export default function HomeScreen() {
   const { user, loading } = useAuth();
+  if (loading) return null;
+  if (!user) return <Redirect href="/login" />;
+  return <TasksScreen key={user.id} />;
+}
 
+function TasksScreen() {
+  const { user } = useAuth();
   const [task, setTask] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [priority, setPriority] = useState<Todo["priority"]>("Medium");
@@ -127,26 +133,24 @@ export default function HomeScreen() {
     ]);
   };
 
-  const handleDeleteTask = (id: number) => {
+  useEffect(() => () => {
+    if (deleteTimer.current) clearTimeout(deleteTimer.current);
+  }, []);
+
+  const handleDeleteTask = async (id: number) => {
     const todo = taskItems.find((item) => item.id === id);
     if (!todo) return;
 
-    setTaskItems((items) => items.filter((item) => item.id !== id));
-    setDeletedTask(todo);
-
-    if (deleteTimer.current) {
-      clearTimeout(deleteTimer.current);
+    try {
+      await deleteTodo(todo.id);
+      setTaskItems(items => items.filter(item => item.id !== id));
+      setDeletedTask(todo);
+      if (deleteTimer.current) clearTimeout(deleteTimer.current);
+      deleteTimer.current = setTimeout(() => setDeletedTask(null), 3000);
+      void syncNow();
+    } catch (error) {
+      Alert.alert("Delete failed", error instanceof Error ? error.message : "Please try again");
     }
-
-    deleteTimer.current = setTimeout(async () => {
-      try {
-        await deleteTodo(todo.id);
-        setDeletedTask(null);
-        void syncNow();
-      } catch (e) {
-        console.error("Failed to delete todo:", e);
-      }
-    }, 3000);
   };
 
   const handleEditTask = (todo: Todo) => {
@@ -183,9 +187,6 @@ export default function HomeScreen() {
       Alert.alert("Update failed", "Please try again.");
     }
   };
-
-  if (loading) return null;
-  if (!user) return <Redirect href="/login" />;
 
   return (
     <ThemedView style={styles.container}>

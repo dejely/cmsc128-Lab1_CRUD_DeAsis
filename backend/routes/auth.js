@@ -1,8 +1,6 @@
 const bcrypt = require("bcrypt");
 const crypto = require("node:crypto");
-const jwt = require("jsonwebtoken");
-const db = require("../db");
-const { requireAuth } = require("../auth");
+const { HttpError, credentials, objectBody } = require("../validation");
 
 const USERNAME_RE = /^[A-Za-z0-9_.-]{3,32}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -34,28 +32,15 @@ function publicUser(row) {
   };
 }
 
-function signToken(user) {
-  if (!process.env.JWT_SECRET) {
-    throw new Error("JWT_SECRET is not configured.");
-  }
-
-  return jwt.sign(
-    {
-      sub: String(user.id),
-      username: user.username,
-      email: user.email,
-    },
-    process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN || "7d" },
-  );
-}
-
-function registerRoutes(app, { sendResetEmail }) {
-  app.post("/auth/register", async (req, res, next) => {
+function registerRoutes(app, { db, issue, requireAuth, limitAuth, sendResetEmail }) {
+  const dummyHash = bcrypt.hashSync("unused-login-password", 12);
+  app.post("/auth/logout", requireAuth, (req, res) => {
+    db.prepare("DELETE FROM sessions WHERE id = ? AND user_id = ?").run(req.sessionId, req.userId);
+    res.status(204).end();
+  });
+  app.post(["/auth/register", "/auth/signup"], limitAuth, async (req, res, next) => {
     try {
-      const username = String(req.body?.username || "").trim();
-      const email = normalizeEmail(req.body?.email);
-      const password = String(req.body?.password || "");
+      const { username, email, password } = credentials(req.body, true);
 
       const validationError = validateCredentials(username, email, password);
       if (validationError) {
@@ -89,7 +74,7 @@ function registerRoutes(app, { sendResetEmail }) {
         .get(result.lastInsertRowid);
 
       return res.status(201).json({
-        token: signToken(user),
+        token: issue(user).token,
         user: publicUser(user),
       });
     } catch (error) {
@@ -97,16 +82,17 @@ function registerRoutes(app, { sendResetEmail }) {
     }
   });
 
-  app.post("/auth/login", async (req, res, next) => {
+  app.post("/auth/login", limitAuth, async (req, res, next) => {
     try {
-      const identifier = String(req.body?.identifier || "").trim();
-      const password = String(req.body?.password || "");
-
-      if (!identifier || !password) {
-        return res.status(400).json({ error: "Username/email and password are required." });
+      objectBody(req.body, ["identifier", "email", "password"]);
+      const identifier = req.body.identifier ?? req.body.email;
+      const password = req.body.password;
+      if (typeof identifier !== "string" || !identifier.trim() || identifier.length > 254 ||
+          typeof password !== "string" || !password || Buffer.byteLength(password) > 72) {
+        throw new HttpError(400, "Username/email and password are required");
       }
 
-      const normalizedIdentifier = identifier.toLowerCase();
+      const normalizedIdentifier = identifier.trim().toLowerCase();
       const user = db
         .prepare(`
           SELECT id, username, email, password_hash
@@ -115,19 +101,13 @@ function registerRoutes(app, { sendResetEmail }) {
              OR username = ? COLLATE NOCASE
           LIMIT 1
         `)
-        .get(normalizedIdentifier, identifier);
+        .get(normalizedIdentifier, identifier.trim());
 
-      if (!user) {
-        return res.status(401).json({ error: "Invalid username/email or password." });
-      }
-
-      const matches = await bcrypt.compare(password, user.password_hash);
-      if (!matches) {
-        return res.status(401).json({ error: "Invalid username/email or password." });
-      }
+      const matches = await bcrypt.compare(password, user ? user.password_hash : dummyHash);
+      if (!user || !matches) throw new HttpError(401, "Invalid email or password");
 
       return res.json({
-        token: signToken(user),
+        token: issue(user).token,
         user: publicUser(user),
       });
     } catch (error) {
@@ -149,6 +129,7 @@ function registerRoutes(app, { sendResetEmail }) {
 
   app.patch("/auth/me", requireAuth, async (req, res, next) => {
     try {
+      objectBody(req.body, ["username", "email"]);
       const currentUser = db
         .prepare("SELECT id, username, email FROM users WHERE id = ?")
         .get(req.userId);
@@ -216,7 +197,7 @@ function registerRoutes(app, { sendResetEmail }) {
     }
   });
 
-  app.post("/auth/reset-request", async (req, res, next) => {
+  app.post("/auth/reset-request", limitAuth, async (req, res, next) => {
     try {
       const email = normalizeEmail(req.body?.email);
 
@@ -279,12 +260,12 @@ function registerRoutes(app, { sendResetEmail }) {
     }
   });
 
-  app.post("/auth/reset-confirm", async (req, res, next) => {
+  app.post("/auth/reset-confirm", limitAuth, async (req, res, next) => {
     try {
       const token = String(req.body?.token || "");
       const newPassword = String(req.body?.newPassword || "");
 
-      if (!token || newPassword.length < PASSWORD_MIN_LENGTH) {
+      if (!token || newPassword.length < PASSWORD_MIN_LENGTH || !newPassword.trim() || Buffer.byteLength(newPassword) > 72) {
         return res.status(400).json({
           error: `Token and a password of at least ${PASSWORD_MIN_LENGTH} characters are required.`,
         });
@@ -311,6 +292,11 @@ function registerRoutes(app, { sendResetEmail }) {
       const passwordHash = await bcrypt.hash(newPassword, 12);
 
       const transaction = db.transaction(() => {
+        const currentReset = db.prepare("SELECT used_at, expires_at FROM password_reset_tokens WHERE id = ?").get(reset.id);
+        if (!currentReset || currentReset.used_at || Date.parse(currentReset.expires_at) <= Date.now()) {
+          throw new HttpError(400, "Reset token is invalid or expired");
+        }
+        db.prepare("DELETE FROM sessions WHERE user_id = ?").run(reset.user_id);
         db.prepare(`
           UPDATE users
           SET password_hash = ?, updated_at = datetime('now')

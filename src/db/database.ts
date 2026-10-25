@@ -158,25 +158,7 @@ export async function initDatabase() {
   const database = await getDatabase();
   await migrateTodoSchema(database);
 
-  await database.execAsync(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-      username TEXT NOT NULL UNIQUE,
-      password_hash TEXT NOT NULL,
-      created_at DATETIME DEFAULT (datetime('now', 'localtime')),
-      email TEXT NOT NULL CHECK (email = LOWER(email)) UNIQUE
-    );
-  `);
 
-  const userColumns = await database.getAllAsync<{ name: string }>(
-    "PRAGMA table_info(users)",
-  );
-
-  if (!userColumns.some((column) => column.name === "email")) {
-    await database.execAsync(
-      "ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT '' CHECK (email = LOWER(email))",
-    );
-  }
 }
 
 export async function getActiveAccountKey(): Promise<string | null> {
@@ -666,24 +648,6 @@ export async function removePendingQueueForTodo(localId: number) {
     "DELETE FROM todo_sync_queue WHERE local_todo_id = ? AND owner_key = ?",
     localId,
     ownerKey,
-  );
-}
-
-export async function createUser(
-  username: string,
-  password_hash: string,
-  email: string,
-) {
-  // Kept only for compatibility with the pre-backend local database.
-  // New registration is performed by the Express backend.
-  await initDatabase();
-  const database = await getDatabase();
-
-  await database.runAsync(
-    "INSERT INTO users (username, password_hash, email) VALUES (?, ?, ?)",
-    username,
-    password_hash,
-    email,
   );
 }
 

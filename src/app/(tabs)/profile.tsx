@@ -94,7 +94,9 @@ export default function Profile() {
 
         <Pressable
           style={styles.accountLoginButton}
-          onPress={() => void signOut()}
+          onPress={() => {
+            void signOut().catch(error => Alert.alert("Sign out failed", error instanceof Error ? error.message : "Please try again"));
+          }}
         >
           <Text style={styles.accountLoginButtonText}>Log out</Text>
         </Pressable>

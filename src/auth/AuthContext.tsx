@@ -13,6 +13,8 @@ import {
   getAuthToken,
   getMe,
   login,
+  logout,
+  subscribeToUnauthorized,
   register,
   removeAuthToken,
   saveAuthToken,
@@ -21,7 +23,6 @@ import {
 import {
   clearActiveAccount,
   clearSavedSignedInUser,
-  claimExistingTodosForAccount,
   initDatabase,
   getSignedInUser,
   saveSignedInUser,
@@ -57,7 +58,6 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const establishLocalAccount = async (nextUser: AuthUser) => {
     await setActiveAccount(nextUser.id);
-    await claimExistingTodosForAccount(nextUser.id);
   };
 
   const finishSignIn = async (token: string, nextUser: AuthUser) => {
@@ -66,8 +66,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
     await establishLocalAccount(nextUser);
     setUser(nextUser);
 
-    // A successful sign-in is the point at which old unowned device todos
-    // become associated with this backend account. Sync is best-effort.
+    // Sync only rows already owned by this account; legacy unowned rows are
+    // never assigned to whichever user happens to sign in next.
     await syncNow();
   };
 
@@ -135,6 +135,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
     return unsubscribe;
   }, [user?.id]);
 
+  useEffect(() => subscribeToUnauthorized(() => {
+    setUser(null);
+    void Promise.all([clearActiveAccount(), clearSavedSignedInUser()]).catch(() => {
+      console.error("Could not clear the cached account");
+    });
+  }), []);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
@@ -179,6 +186,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
       },
 
       async signOut() {
+        try { await logout(); }
+        catch (error) { if (!(error instanceof ApiError && error.status === 401)) throw error; }
         await removeAuthToken();
         await clearActiveAccount();
         await clearSavedSignedInUser();

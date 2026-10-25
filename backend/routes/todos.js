@@ -1,6 +1,7 @@
-const db = require("../db");
-const { requireAuth } = require("../auth");
+const crypto = require("node:crypto");
+const { HttpError, todoBody, taskId, objectBody } = require("../validation");
 
+function registerTodoRoutes(app, { db, requireAuth }) {
 const PRIORITIES = new Set(["Low", "Medium", "High"]);
 const CATEGORIES = new Set(["School", "Personal", "Others"]);
 
@@ -20,48 +21,27 @@ function toApiTodo(row) {
   };
 }
 
-function listTodos(userId) {
+function listTodos(userId, includeDeleted = false) {
   return db
     .prepare(`
       SELECT
         id, title, completed, due_date, priority, category,
         client_id, created_at, updated_at, version, deleted_at
       FROM todos
-      WHERE user_id = ?
+      WHERE user_id = ? AND (? OR deleted_at IS NULL)
       ORDER BY updated_at DESC, id DESC
     `)
-    .all(userId)
+    .all(userId, includeDeleted ? 1 : 0)
     .map(toApiTodo);
 }
 
 function validateTodoPayload(payload) {
-  if (!payload || typeof payload !== "object") {
-    return "Todo payload is required.";
-  }
-  if (typeof payload.title !== "string" || payload.title.trim().length === 0) {
-    return "Todo title is required.";
-  }
-  if (payload.title.trim().length > 500) {
-    return "Todo title is too long.";
-  }
-  if (![0, 1, false, true].includes(payload.completed)) {
-    return "Todo completed value is invalid.";
-  }
-  if (!PRIORITIES.has(payload.priority)) {
-    return "Todo priority is invalid.";
-  }
-  if (!CATEGORIES.has(payload.category)) {
-    return "Todo category is invalid.";
-  }
-  if (payload.dueDate !== null && payload.dueDate !== undefined) {
-    if (
-      typeof payload.dueDate !== "string" ||
-      Number.isNaN(new Date(payload.dueDate).getTime())
-    ) {
-      return "Todo due date is invalid.";
-    }
-  }
-  return null;
+  try {
+    objectBody(payload, ["title", "completed", "dueDate", "priority", "category", "clientId"]);
+    const { clientId, ...fields } = payload;
+    todoBody(fields);
+    return null;
+  } catch (error) { return error.message; }
 }
 
 function normalizeUpdatedAt(value) {
@@ -267,7 +247,6 @@ function applyOperation(userId, operation) {
   return result;
 }
 
-function registerTodoRoutes(app) {
   app.get("/todos", requireAuth, (req, res) => {
     res.json({ todos: listTodos(req.userId) });
   });
@@ -294,7 +273,7 @@ function registerTodoRoutes(app) {
       const hasErrors = results.some((result) => !result.ok);
       return res.status(hasErrors ? 207 : 200).json({
         results,
-        todos: listTodos(req.userId),
+        todos: listTodos(req.userId, true),
       });
     } catch (error) {
       return next(error);
@@ -303,18 +282,20 @@ function registerTodoRoutes(app) {
 
   app.post("/todos", requireAuth, (req, res, next) => {
     try {
-      const payload = req.body || {};
+      objectBody(req.body, ["title", "completed", "dueDate", "priority", "category", "clientId", "updatedAt"]);
+      const { updatedAt: suppliedUpdatedAt, ...fields } = req.body;
+      const payload = { completed: 0, ...fields };
       const validationError = validateTodoPayload(payload);
       if (validationError) {
         return res.status(400).json({ error: validationError });
       }
 
-      const clientId = String(payload.clientId || "");
+      const clientId = payload.clientId === undefined ? crypto.randomUUID() : String(payload.clientId || "");
       if (!clientId) {
         return res.status(400).json({ error: "clientId is required." });
       }
 
-      const updatedAt = normalizeUpdatedAt(payload.updatedAt) || new Date().toISOString();
+      const updatedAt = normalizeUpdatedAt(suppliedUpdatedAt) || new Date().toISOString();
 
       const result = applyOperation(req.userId, {
         operationId: `direct-create-${clientId}`,
@@ -335,14 +316,18 @@ function registerTodoRoutes(app) {
 
   app.patch("/todos/:id", requireAuth, (req, res, next) => {
     try {
+      const id = taskId(req.params.id);
+      objectBody(req.body, ["title", "completed", "dueDate", "priority", "category", "updatedAt"]);
+      const { updatedAt: suppliedUpdatedAt, ...patch } = req.body;
+      todoBody(patch, true);
       const current = db.prepare(`
         SELECT id, title, completed, due_date, priority, category,
                client_id, created_at, updated_at, version, deleted_at
         FROM todos
         WHERE id = ? AND user_id = ?
-      `).get(Number(req.params.id), req.userId);
+      `).get(id, req.userId);
 
-      if (!current) {
+      if (!current || current.deleted_at) {
         return res.status(404).json({ error: "Todo not found." });
       }
 
@@ -350,18 +335,18 @@ function registerTodoRoutes(app) {
       const payload = {
         title: body.title ?? current.title,
         completed: body.completed ?? current.completed,
-        dueDate: body.dueDate ?? current.due_date,
+        dueDate: Object.hasOwn(body, "dueDate") ? body.dueDate : current.due_date,
         priority: body.priority ?? current.priority,
         category: body.category ?? current.category,
         clientId: current.client_id,
       };
 
       const result = applyOperation(req.userId, {
-        operationId: `direct-update-${req.params.id}-${Date.now()}`,
+        operationId: crypto.randomUUID(),
         type: "update",
         serverId: Number(req.params.id),
         payload,
-        updatedAt: body.updatedAt || new Date().toISOString(),
+        updatedAt: suppliedUpdatedAt || new Date(Math.max(Date.now(), Date.parse(current.updated_at) + 1)).toISOString(),
       });
 
       if (!result.ok) return res.status(400).json({ error: result.error });
@@ -377,12 +362,15 @@ function registerTodoRoutes(app) {
 
   app.delete("/todos/:id", requireAuth, (req, res, next) => {
     try {
+      const id = taskId(req.params.id);
+      const current = db.prepare("SELECT updated_at FROM todos WHERE id = ? AND user_id = ? AND deleted_at IS NULL").get(id, req.userId);
+      if (!current) throw new HttpError(404, "Task not found");
       const result = applyOperation(req.userId, {
-        operationId: `direct-delete-${req.params.id}-${Date.now()}`,
+        operationId: crypto.randomUUID(),
         type: "delete",
         serverId: Number(req.params.id),
         payload: {},
-        updatedAt: new Date().toISOString(),
+        updatedAt: new Date(Math.max(Date.now(), Date.parse(current.updated_at) + 1)).toISOString(),
       });
 
       if (!result.ok) return res.status(400).json({ error: result.error });

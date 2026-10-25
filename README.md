@@ -10,9 +10,9 @@ The task form validates the title and due date and lets the user choose Low, Med
 
 The mobile client uses React Native with Expo SDK 57, Expo Router, and TypeScript. Expo SQLite stores the local task cache and pending sync operations in `tasks.db`. The client talks to a Node.js and Express REST API. The backend uses SQLite through `better-sqlite3`, with its database stored at `backend/data.sqlite` by default.
 
-Authentication is handled by the backend. It hashes passwords with bcrypt and returns a signed JSON Web Token (JWT) after registration or login. The client stores the JWT in Expo SecureStore and caches the signed-in profile in its local SQLite database. The API uses the token as a Bearer credential for protected profile and task operations. The token expires after seven days by default; `JWT_EXPIRES_IN` can change that duration.
+Authentication is handled by the backend. It hashes passwords with bcrypt and returns a signed JSON Web Token (JWT) after registration or login. The client stores the JWT in Expo SecureStore and caches the signed-in profile in its local SQLite database. The API uses the token as a Bearer credential for protected profile and task operations. Tokens expire after one hour by default; `JWT_EXPIRES_IN` can change that duration.
 
-The app writes task changes to its local database and queues them for `POST /todos/sync`. It synchronizes after sign-in and when the network becomes available. The backend creates its tables on startup and applies additive schema updates for older databases. The mobile database also initializes and migrates automatically. There is no seed-data command; create an account in the app or call the registration endpoint.
+The app writes task changes to its local database and queues them for `POST /todos/sync`. It synchronizes after sign-in and when the network becomes available. The backend creates its tables on startup and applies versioned, additive schema updates for older databases. It preserves both the existing sync schema and the PR’s earlier task schema. The mobile database also initializes and migrates automatically. There is no seed-data command; create an account in the app or call the registration endpoint.
 
 ## Install and run locally
 
@@ -37,7 +37,7 @@ npm ci
 cp .env.example .env
 ```
 
-Edit `backend/.env` and set `JWT_SECRET` to a long random value. For example, run this command from the `backend` directory and copy its output into the `JWT_SECRET` setting:
+Edit `backend/.env` and set `JWT_SECRET` to a random value of at least 32 bytes. The server refuses to start with a missing or shorter signing secret. For example, run this command from the `backend` directory and copy its output into the `JWT_SECRET` setting:
 
 ```bash
 node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
@@ -61,7 +61,7 @@ The first Android run generates the native project as needed, builds and install
 
 ## Database initialization
 
-Starting the backend runs the initialization in [`backend/db.js`](backend/db.js). It creates the `users`, `todos`, `password_reset_tokens`, and `sync_operations` tables in the configured backend SQLite file and adds supported missing columns to older databases. No separate migration or seed command is required.
+Starting the backend runs the initialization in [`backend/db.js`](backend/db.js). It creates the `users`, `todos`, `sessions`, `password_reset_tokens`, and `sync_operations` tables in the configured backend SQLite file and adds supported missing columns to older databases. No separate migration or seed command is required.
 
 The app initializes `tasks.db` on first launch and stores its local tasks and sync queue there. Local changes remain available offline and are sent to the backend after connectivity returns. The local and backend databases are separate: the backend is the account-synced store, while the app database is its on-device cache and offline queue.
 
@@ -85,7 +85,7 @@ curl -X POST http://localhost:3000/todos \
   -H 'Authorization: Bearer YOUR_TOKEN' \
   -d '{
     "title":"Finish CMSC 128 report",
-    "completed":false,
+    "completed":0,
     "dueDate":"2026-10-10T00:00:00.000Z",
     "priority":"High",
     "category":"School",
@@ -97,6 +97,19 @@ The reset flow uses `POST /auth/reset-request` with an email address and `POST /
 
 ## Session and password recovery
 
-After registration or login, the API signs a JWT whose default lifetime is seven days. The app stores it in SecureStore and restores the session on launch by checking `GET /auth/me`. If the API is temporarily unreachable and a cached profile exists, the app keeps the local session available for offline task work. On launch, an expired or rejected token clears the saved session. Logging out removes the token and cached active profile from the device.
+After registration or login, the API signs an HS256 JWT with an issuer, audience, and one-hour default lifetime. Its session ID is recorded in SQLite and checked on every protected request. The app stores it in SecureStore and restores the session on launch by checking `GET /auth/me`. If the API is temporarily unreachable and a cached profile exists, the app keeps the local session available for offline task work. On launch, an expired or rejected token clears the saved session. Logging out calls `POST /auth/logout` to revoke the server session, then removes the token and cached active profile from the device. A rejected protected request also clears the current saved session; a late response from an older login cannot clear a newer token.
 
-Password recovery is initiated from the app's **Forgot Password** screen. The API generates a random, single-use token that expires after 30 minutes; it stores only the token's SHA-256 hash in the backend database and emails a deep link to the app. The user opens that link and submits a new password of at least eight characters. The backend bcrypt-hashes the new password and marks the reset token as used. The reset endpoint intentionally returns the same message for registered and unregistered email addresses. A reset link will only arrive when SMTP is configured and can deliver mail. A password reset does not revoke JWTs that were already issued; they remain valid until they expire.
+Password recovery is initiated from the app's **Forgot Password** screen. The API generates a random, single-use token that expires after 30 minutes; it stores only the token's SHA-256 hash in the backend database and emails a deep link to the app. The user opens that link and submits a new password of at least eight characters. The backend bcrypt-hashes the new password and marks the reset token as used. The reset endpoint intentionally returns the same message for registered and unregistered email addresses. A reset link will only arrive when SMTP is configured and can deliver mail. A successful password reset revokes all of that account’s existing sessions. Reset confirmation rechecks the token inside the database transaction so simultaneous requests cannot reuse it.
+
+
+## Validation and compatibility
+
+`POST /auth/signup` remains an alias for `/auth/register`. Login accepts the existing `identifier` field (username or email) and the PR's `email` field. The existing profile, reset, and sync endpoints remain available. Direct task creation can generate a client ID when one is not supplied. Deletion keeps a tombstone for offline synchronization; the direct delete endpoint returns the deleted task, while ordinary task lists exclude deleted rows. Sync responses include tombstones so other devices can remove their cached copies.
+
+Passwords must contain at least eight characters and at most 72 UTF-8 bytes. Task titles contain 1–200 characters after trimming, `completed` is integer 0 or 1, and dates use canonical ISO timestamps (or null for tasks without a due date). Unknown fields and client-supplied ownership IDs are rejected. The API limits JSON bodies to 100 KB and authentication requests to 20 per IP per 15 minutes. Set `CORS_ORIGINS` to a comma-separated list of allowed browser origins; native clients do not require CORS permission. Rate limits are per process, and proxy trust remains disabled.
+
+Legacy device passwords are never used for authentication. Existing tasks without an owner remain on the device and are not automatically assigned or uploaded when another account signs in. Importing those tasks requires an explicit ownership decision. The server migrates its schema to version 2 without replacing account, task, or session rows. Previously issued tokens from the old server without a tracked session require a fresh login.
+
+## Checks
+
+Run `npm test --prefix backend` for HTTP integration tests against isolated databases. The suite covers hashing, validation, uniqueness, account isolation, token expiry and revocation, request limits, profile updates, offline-sync idempotency and tombstones, password recovery, and schema migration. `node --test scripts/test-api-client.cjs` checks the frontend transport and token-storage boundary with mocked fetch and SecureStore. `npx tsc --noEmit` checks mobile types. These checks do not prove native navigation, handset connectivity, or SMTP delivery.
